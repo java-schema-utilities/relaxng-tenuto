@@ -9,21 +9,37 @@ using System.Xml;
 using Tenuto.Grammar;
 using org.relaxng.datatype;
 
+/*
+
+	TODO: there seems to be a bug in the "xml" namespace handling.
+	XmlReader doesn't consider the "xml" prefix to be bounded to
+	"http://www.w3.org/XML/1998/namespace".
+*/
 public class GrammarReader : ValidationContext {
 	
-	public Grammar parse( String sourceURL ) {
-		return parse( new XmlTextReader(sourceURL) );
+	public Grammar parse( string sourceURL ) {
+		
+		try {
+			new Uri(sourceURL);
+		} catch( UriFormatException ) {
+			sourceURL = Path.GetFullPath(sourceURL);
+		}
+		
+		return parse( new XmlTextReader(sourceURL), sourceURL );
 //			(Stream)new XmlUrlResolver().GetEntity( new Uri(sourceURL), null, typeof(Stream) 	}
 	}
 	
-	public Grammar parse( Stream source ) {
-		return parse( new XmlTextReader(source) );
-	}
+//	public Grammar parse( Stream source ) {
+//		return parse( new XmlTextReader(source) );
+//	}
 	
-	public Grammar parse( XmlReader reader ) {
+	public Grammar parse( XmlReader reader, string systemId ) {
 		
 		XmlReader oldReader = this.reader;
+		string oldSystemId = this.systemId;
+		
 		this.reader = reader;
+		this.systemId = systemId;
 		try {
 			// skip xml declaration, DOCTYPE etc.
 			while(!reader.IsStartElement())	reader.Read();
@@ -41,6 +57,7 @@ public class GrammarReader : ValidationContext {
 			}
 		} finally {
 			this.reader = oldReader;
+			this.systemId = oldSystemId;
 		}
 	}
 	
@@ -54,7 +71,7 @@ public class GrammarReader : ValidationContext {
 	// this object is used to construct the grammar.
 	public ExpBuilder Builder;
 	// this resolver is used to resolve external references.
-	public XmlResolver Resolver;
+	public XmlResolver Resolver = new XmlUrlResolver();
 	// string messages are resolved through this object.
 	public ResourceManager ResManager;
 	
@@ -64,15 +81,17 @@ public class GrammarReader : ValidationContext {
 	
 	
 	protected XmlReader reader;
+	protected string systemId;
 	protected Grammar grammar;
 	
 	// RELAX NG namespace
-	public const String RELAXNGNamespace = "http://relaxng.org/ns/structure/1.0";
+	public const string RELAXNGNamespace = "http://relaxng.org/ns/structure/1.0";
 	
 	public GrammarReader( GrammarReaderController controller, ExpBuilder builder ) {
 		this.Controller = controller;
 		this.Builder = builder;
-		this.ResManager = new ResourceManager(this.GetType());		
+//		this.ResManager = new ResourceManager(this.GetType());		
+		this.ResManager = new ResourceManager("GrammarReader",this.GetType().Assembly);
 		
 		{
 			// derived classes can set additional ExpReader directly to
@@ -110,7 +129,7 @@ public class GrammarReader : ValidationContext {
 		
 		nsStack.Push("");
 		dtLibURIStack.Push("");
-		dtLibStack.Push(Tenuto.Datatype.DatatypeLibraryImpl.theInstance);
+		xmlBaseStack.Push(null);
 	}
 	
 //
@@ -121,7 +140,9 @@ public class GrammarReader : ValidationContext {
 // directly called. Instead, methods defined in this class should be called.
 	private readonly Stack nsStack = new Stack();
 	private readonly Stack dtLibURIStack = new Stack();
-	private readonly Stack dtLibStack = new Stack();
+	
+	// at least with Beta2 SDK, XmlReader.BaseURI doesn't seem to work
+	private readonly Stack xmlBaseStack = new Stack();
 	
 	/**
 	 * return false if this element is an empty element
@@ -129,70 +150,80 @@ public class GrammarReader : ValidationContext {
 	protected bool ReadStartElement() {
 		Trace.WriteLine("read <"+reader.Name+">");
 		
-		String ns = reader.GetAttribute("ns");
-		if(ns==null)		ns=(String)nsStack.Peek();
+		string ns = reader.GetAttribute("ns");
+		if(ns==null)		ns=(string)nsStack.Peek();
 		nsStack.Push(ns);
 		
-		String dtLibURI = reader.GetAttribute("datatypeLibrary");
-		DatatypeLibrary dtLib = null;
-		if(dtLibURI==null) {
-			dtLibURI=(String)dtLibURIStack.Peek();
-			dtLib=(DatatypeLibrary)dtLibStack.Peek();
-		} else {
-			dtLib=ResolveDatatypeLibrary(dtLibURI);
-		}
-		dtLibURIStack.Push(dtLibURI);
-		dtLibStack.Push(dtLib);
+		bool isEmpty = reader.IsEmptyElement;
 		
-		bool r = !reader.IsEmptyElement;
+		string dtLibURI = reader.GetAttribute("datatypeLibrary");
+		string xmlBase = reader.GetAttribute("xml:base");
+		if(dtLibURI==null)
+			dtLibURI=(string)dtLibURIStack.Peek();
+		if(xmlBase==null)
+			xmlBase=(string)xmlBaseStack.Peek();
+			
+		if(!isEmpty) {
+			dtLibURIStack.Push(dtLibURI);
+			xmlBaseStack.Push(xmlBase);
+		}
 		reader.ReadStartElement();
-		return r;
+		return !isEmpty;
 	}
 	
 	protected void ReadEndElement() {
 		Trace.WriteLine("read </"+reader.Name+">");
 		
 		nsStack.Pop();
-		dtLibStack.Pop();
+		dtLibURIStack.Pop();
+		xmlBaseStack.Pop();
 		reader.ReadEndElement();
 	}
 	
 	// gets the propagated value of the ns attribute.
-	protected String ns {
+	protected string ns {
 		get {
-			String ns = reader.GetAttribute("ns");
+			string ns = reader.GetAttribute("ns");
 			if(ns!=null)	return ns;
-			else			return (String)nsStack.Peek();
+			else			return (string)nsStack.Peek();
 		}
 	}
-	protected String datatypeLibraryURI {
+	protected string xmlBase {
 		get {
-			String uri = reader.GetAttribute("datatypeLibrary");
+			string v = reader.GetAttribute("xml:base");
+			if(v!=null)		return v;
+			else			return (string)xmlBaseStack.Peek();
+		}
+	}
+	protected string datatypeLibraryURI {
+		get {
+			string uri = reader.GetAttribute("datatypeLibrary");
 			if(uri!=null)	return uri;
-			else			return (String)dtLibURIStack.Peek();
+			else			return (string)dtLibURIStack.Peek();
 		}
 	}
 	protected DatatypeLibrary datatypeLibrary {
 		get {
-			String uri = reader.GetAttribute("datatypeLibrary");
-			if(uri!=null)	return ResolveDatatypeLibrary(uri);
-			else			return (DatatypeLibrary)dtLibStack.Peek();
+			// TODO: use a map to cache DatatypeLibrary object
+			return ResolveDatatypeLibrary(datatypeLibraryURI);
 		}
 	}
 	
 	// resolves the datatypeLibrary attribute value to a DatatypeLibrary object.
-	protected virtual DatatypeLibrary ResolveDatatypeLibrary( String uri ) {
-		throw new Exception();
+	protected virtual DatatypeLibrary ResolveDatatypeLibrary( string uri ) {
+		if(uri.Equals(""))
+			return Tenuto.Datatype.DatatypeLibraryImpl.theInstance;
+		throw new Exception(uri);
 	}
 	
 	private class InvalidQNameException : Exception {}
 	// converts a QName to an XmlName.
 	// throws an InvalidQNameException when qname contains undeclared prefix.
-	protected XmlName ProcessQName( String qname ) {
+	protected XmlName ProcessQName( string qname ) {
 		int idx = qname.IndexOf(':');
 		if(idx<0)	return new XmlName(ns,qname);	// no prefix
 		
-		String uri = reader.LookupNamespace(qname.Substring(0,idx));
+		string uri = reader.LookupNamespace(qname.Substring(0,idx));
 		if(uri==null)	throw new InvalidQNameException();
 		return new XmlName(uri,qname.Substring(idx+1));
 	}
@@ -222,9 +253,11 @@ public class GrammarReader : ValidationContext {
 			return;	// empty content
 		}
 		// skip any elements from forein namespace
-		while(SkipForeignElements())
+		while(SkipForeignElements()) {
 			// elements from RELAX NG namespace. Error.
-			ReportError( ERR_NO_ELEMENT_EXPECTED, reader.Name );
+			ReportError( ERR_UNEXPECTED_ELEMENT, reader.Name );
+			reader.Skip();
+		}
 		
 		// TODO: how can we detect literal strings?
 		ReadEndElement();
@@ -292,6 +325,7 @@ public class GrammarReader : ValidationContext {
 		if(expreader==null) {
 			// error: unknown element name
 			ReportError( ERR_EXPRESSION_EXPECTED, reader.Name );
+			reader.Skip();
 			return Expression.NotAllowed;	// recover
 		}
 		
@@ -313,12 +347,16 @@ public class GrammarReader : ValidationContext {
 	}
 	protected virtual Expression ExternalRef() {
 		XmlReader previous = reader;
-		String href = GetRequiredAttribute("href");
+		string href = GetRequiredAttribute("href");
+		
+		// this method has to be called while we are at the start element.
+		XmlReader newReader = ResolveEntity(href);
+		
 		EmptyContent();
 		if(href==null)
 			return Expression.NotAllowed;
 		
-		reader = ResolveEntity(href);
+		reader = newReader;
 		try {
 			// skip XML declarations, DOCTYPE, etc.
 			while(!reader.IsStartElement())	reader.Read();
@@ -329,7 +367,7 @@ public class GrammarReader : ValidationContext {
 		}
 	}
 	protected virtual Expression Ref() {
-		String name = GetRequiredAttribute("name");
+		string name = GetRequiredAttribute("name");
 		EmptyContent();
 		if(name==null)
 			// error: missing attribute
@@ -345,7 +383,7 @@ public class GrammarReader : ValidationContext {
 		return exp;
 	}
 	protected virtual Expression ParentRef() {
-		String name = GetRequiredAttribute("name");
+		string name = GetRequiredAttribute("name");
 		EmptyContent();
 		if(name==null)
 			// error: missing attribute
@@ -370,11 +408,11 @@ public class GrammarReader : ValidationContext {
 		return ReadContainerExp( new ExpCombinator(Builder.CreateChoice) );
 	}
 	protected virtual Expression ReadContainerExp( ExpCombinator combinator ) {
-		String name = reader.Name;
+		string name = reader.Name;
 		if(ReadStartElement())
 			return ReadChildExps( combinator );
 		// no children. error
-		ReportError( ERR_NO_CHILD_EXPRESSION, name );
+		ReportError( ERR_EXPRESSION_EXPECTED, name );
 		return Expression.NotAllowed;
 	}
 	protected virtual Expression OneOrMore() {
@@ -393,22 +431,29 @@ public class GrammarReader : ValidationContext {
 		return Builder.CreateMixed(Group());
 	}
 	protected virtual Expression Element() {
-		NameClass nc = ReadNameClassOrNameAttr();
+		bool isEmpty;
+		NameClass nc = ReadNameClassOrNameAttr(out isEmpty);
+		if(isEmpty) {
+			ReportError( ERR_EXPRESSION_EXPECTED );
+			return Expression.NotAllowed;
+		}
 		Expression contents = ReadChildExps( new ExpCombinator(Builder.CreateSequence) );
 		return new ElementExp(nc,contents);
 	}
 	protected virtual Expression Attribute() {
-		NameClass nc = ReadNameClassOrNameAttr();
-		Expression contents;
-		if( SkipForeignElements() )
-			contents = ReadChildExps( new ExpCombinator(Builder.CreateSequence) );
-		else
-			contents = Expression.Text;	// attribute content model defaults to <text/>
+		bool isEmpty;
+		NameClass nc = ReadNameClassOrNameAttr(out isEmpty);
+		Expression contents = Expression.Text;
+		
+		if(!isEmpty) {
+			if( SkipForeignElements() )
+				contents = ReadChildExps( new ExpCombinator(Builder.CreateSequence) );
+		}
 		return new AttributeExp(nc,contents);
 	}
-	protected virtual NameClass ReadNameClassOrNameAttr() {
-		String name = reader.GetAttribute("name");
-		ReadStartElement();
+	protected virtual NameClass ReadNameClassOrNameAttr( out bool isEmpty ) {
+		string name = reader.GetAttribute("name");
+		isEmpty = !ReadStartElement();
 		if(name!=null) {
 			return new SimpleNameClass(ProcessQName(name));
 		}
@@ -436,8 +481,11 @@ public class GrammarReader : ValidationContext {
 			if(!ReadStartElement())
 				value = dt.CreateValue("",this);
 			else {
-				value = dt.CreateValue(ReadPCDATA(),this);
+				string s = ReadPCDATA();
 				ReadEndElement();
+				
+				if(s==null)		return Expression.NotAllowed;
+				value = dt.CreateValue(s,this);
 			}
 		
 			return Builder.CreateValue(dt,value);
@@ -469,21 +517,21 @@ public class GrammarReader : ValidationContext {
 		if(ReadStartElement()) {
 			// if the element has contents, parse them.
 			while(SkipForeignElements()) {
-				String name = reader.LocalName;
+				string name = reader.LocalName;
 				if(name=="param")
 					DataParam(builder);
 				else
 				if(name=="except") {
 					if( except!=null ) {
 						// only one "except" clause is allowed
-						ReportError( ERR_ONLY_ONE_EXCEPT_ALLOWED );
+						ReportError( ERR_MULTIPLE_EXCEPT );
 						reader.Skip();
 					} else {
 						except = Choice();
 					}
 				} else {
 					// error: unexpected element
-					ReportError( ERR_UNEXPECTED_ELEMENT, reader.Name );
+					ReportError( ERR_EXCEPT_EXPECTED, reader.Name );
 					reader.Skip();
 				}
 			}
@@ -507,12 +555,11 @@ public class GrammarReader : ValidationContext {
 		}
 		
 		try {
-			string value = reader.ReadElementString();
+			string value = ReadPCDATA();
+			if(value==null)	return;
 			builder.AddParameter(name,value,this);
-		} catch( XmlException ) {
-			ReportError( ERR_INVALID_PARAM_CONTENT );
 		} catch( DatatypeException e ) {
-			ReportError( ERR_BAD_DATATYPE_PARAMETER, e.Message );
+			ReportError( ERR_BAD_DATATYPE_PARAMETER, name, e.Message );
 		}
 	}
 	
@@ -524,9 +571,10 @@ public class GrammarReader : ValidationContext {
 		return n;
 	}
 	protected virtual void DivInGrammar() {
-		ReadStartElement();
+		if(!ReadStartElement())		return;
+		
 		while(SkipForeignElements()) {
-			String name = reader.LocalName;
+			string name = reader.LocalName;
 			if(name=="div")		DivInGrammar();
 			else
 			if(name=="start")	Start();
@@ -536,31 +584,35 @@ public class GrammarReader : ValidationContext {
 			if(name=="include")	MergeGrammar();
 			else {
 				// error: unexpected element
-				ReportError( ERR_DIVINGRAMMAR_EXPECTED, reader.Name );
+				ReportError( ERR_UNEXPECTED_ELEMENT, reader.Name );
 				reader.Skip();
 			}
 		}
 		ReadEndElement();
 	}
 	protected virtual ReferenceExp Start() {
-		String combine = reader.GetAttribute("combine");
+		string combine = reader.GetAttribute("combine");
 		Expression exp = null;
-		ReadStartElement();
-		while(SkipForeignElements()) {
-			if(exp==null)	exp = ReadExp();
-			else {
-				// error: unexpected element. Only one child is allowed.
-				ReportError( ERR_UNEXPECTED_2NDELEMENT, reader.Name );
-				reader.Skip();
+		if(ReadStartElement()) {
+			while(SkipForeignElements()) {
+				if(exp==null)	exp = ReadExp();
+				else {
+					// error: unexpected element. Only one child is allowed.
+					ReportError( ERR_UNEXPECTED_ELEMENT, reader.Name );
+					reader.Skip();
+				}
 			}
+			ReadEndElement();
+		} else {
+			ReportError( ERR_EXPRESSION_EXPECTED );
+			exp = Expression.NotAllowed;
 		}
-		ReadEndElement();
 		CombineReferenceExp(grammar,exp,combine);
 		return grammar;
 	}
 	protected virtual ReferenceExp Define() {
-		String combine = reader.GetAttribute("combine");
-		String name = reader.GetAttribute("name");
+		string combine = reader.GetAttribute("combine");
+		string name = reader.GetAttribute("name");
 		if(name==null) {
 			// error: missing attribute
 			ReportError( ERR_MISSING_ATTRIBUTE, reader.Name, "name" );
@@ -576,13 +628,13 @@ public class GrammarReader : ValidationContext {
 	
 	private readonly Hashtable refParseInfos = new Hashtable();
 	private class RefParseInfo {
-		public String Combine;
+		public string Combine;
 		public bool HeadDefined;
 		
 		// this location specifies one of the referer to this expression
 		public int LineNumber = -1;
 		public int LinePosition = -1;
-		public String SourceFile = null;
+		public string SourceFile = null;
 		public void MemorizeReference( XmlReader reader ) {
 			if( reader is XmlTextReader ) {
 				// source information is available only when we are using XmlTextReader
@@ -601,7 +653,7 @@ public class GrammarReader : ValidationContext {
 	}
 	
 	protected virtual void CombineReferenceExp(
-				ReferenceExp r, Expression body, String combine ) {
+				ReferenceExp r, Expression body, string combine ) {
 		if( redefiningRefExps.ContainsKey(r) ) {
 			// this pattern is currently being redefined.
 			redefiningRefExps[r] = true;
@@ -615,14 +667,14 @@ public class GrammarReader : ValidationContext {
 		
 		if( pi.Combine!=null && pi.Combine==combine ) {
 			// error: inconsistent combine method
-			ReportError( ERR_INCONSISTENT_COMBINE, pi.Combine, combine );
+			ReportError( ERR_INCONSISTENT_COMBINE, r.name );
 			pi.Combine = null;
 			return;
 		}
 		if( combine==null ) {
 			if( pi.HeadDefined )
 				// error: multiple heads
-				ReportError( ERR_MULTIPLE_HEADS );
+				ReportError( ERR_MULTIPLE_HEADS, r.name );
 			pi.HeadDefined = true;
 			combine = pi.Combine;
 		} else {
@@ -648,7 +700,7 @@ public class GrammarReader : ValidationContext {
 	private Hashtable redefiningRefExps = new Hashtable();
 	
 	protected virtual void MergeGrammar() {
-		String href = reader.GetAttribute("href");
+		string href = reader.GetAttribute("href");
 		if(href==null) {
 			// error: missing attribute
 			ReportError( ERR_MISSING_ATTRIBUTE, reader.Name, "href" );
@@ -693,9 +745,9 @@ public class GrammarReader : ValidationContext {
 		}
 	}
 	protected virtual void DivInInclude() {
-		ReadStartElement();
+		if(!ReadStartElement())		return;
 		while(SkipForeignElements()) {
-			String name = reader.LocalName;
+			string name = reader.LocalName;
 			if(name=="div")		DivInInclude();
 			else
 			if(name=="start")	redefiningRefExps[Start()] = false;
@@ -703,7 +755,7 @@ public class GrammarReader : ValidationContext {
 			if(name=="define")	redefiningRefExps[Define()] = false;
 			else {
 				// error: unexpected element
-				ReportError( ERR_DIVININCLUDE_EXPECTED, reader.Name );
+				ReportError( ERR_UNEXPECTED_ELEMENT, reader.Name );
 				reader.Skip();
 			}
 		}
@@ -728,7 +780,7 @@ public class GrammarReader : ValidationContext {
 		ReadEndElement();
 		if(exp==null) {
 			// error: no children
-			ReportError( ERR_NO_CHILD_EXPRESSION );
+			ReportError( ERR_EXPRESSION_EXPECTED );
 			exp = Expression.NotAllowed;	// recovery.
 		}
 		return exp;
@@ -737,12 +789,23 @@ public class GrammarReader : ValidationContext {
 	
 	
 	// resolves the "href" value and obtains XmlReader that reads that source.
-	protected virtual XmlReader ResolveEntity( String href ) {
+	protected virtual XmlReader ResolveEntity( string href ) {
+		
+		// at least with SDK beta2, XmlReader.BaseUri is not working.
+		Trace.WriteLine(systemId);
+		Uri uri = new Uri(systemId);
+		string xmlBase = this.xmlBase;
+		if(xmlBase!=null)
+			uri = Resolver.ResolveUri( uri, xmlBase );
+		
+		uri = Resolver.ResolveUri( uri, href );
+		
+		Trace.WriteLine(string.Format(
+			"SystemId:{0} base:{1} href:{2}\nentity uri:{3}",
+			systemId,xmlBase,href,uri));
 		
 		return new XmlTextReader((Stream)Resolver.GetEntity(
-			Resolver.ResolveUri( new Uri(reader.BaseURI), href ),
-			null,
-			typeof(Stream)));
+			uri, null, typeof(Stream)));
 	}
 	
 	
@@ -766,6 +829,7 @@ public class GrammarReader : ValidationContext {
 			if(ncreader==null) {
 				// error: unknown element name
 				ReportError( ERR_NAMECLASS_EXPECTED, reader.Name );
+				reader.Skip();
 				return new SimpleNameClass("foo","bar");	// recover
 			}
 			
@@ -786,7 +850,8 @@ public class GrammarReader : ValidationContext {
 		return new NsNameClass(ns,ReadExceptName());
 	}
 	protected virtual NameClass SimpleName() {
-		String name = reader.ReadElementString();
+		string name = ReadPCDATA();
+		if(name==null)	name="undefined";
 		try {
 			return new SimpleNameClass(ProcessQName(name));
 		} catch( InvalidQNameException ) {
@@ -796,15 +861,16 @@ public class GrammarReader : ValidationContext {
 		}
 	}
 	protected virtual NameClass ChoiceName() {
-		ReadStartElement();
 		NameClass nc=null;
 		
-		while(SkipForeignElements()) {
-			NameClass child = ReadNameClass();
-			if(nc==null)	nc=child;
-			else			nc=new ChoiceNameClass(nc,child);
+		if(ReadStartElement()) {
+			while(SkipForeignElements()) {
+				NameClass child = ReadNameClass();
+				if(nc==null)	nc=child;
+				else			nc=new ChoiceNameClass(nc,child);
+			}
+			ReadEndElement();
 		}
-		ReadEndElement();
 		if(nc==null) {
 			// error: no children
 			ReportError( ERR_NO_CHILD_NAMECLASS );
@@ -862,18 +928,14 @@ public class GrammarReader : ValidationContext {
 		Controller.error( string.Format( ResManager.GetString(propKey), args ), reader );
 	}
 	
-	protected const string ERR_MISSING_ATTRIBUTE =
+	protected const string ERR_MISSING_ATTRIBUTE = // arg:2
 		"GrammarReader.MissingAttribute";
 	protected const string ERR_NO_GRAMMAR =
 		"GrammarReader.NoGrammar";
-	protected const string ERR_NO_ELEMENT_EXPECTED =
-		"GrammarReader.NoElementExpected";
+	protected const string ERR_UNEXPECTED_ELEMENT =
+		"GrammarReader.UnexpectedElement";
 	protected const string ERR_EXPRESSION_EXPECTED =
 		"GrammarReader.ExpressionExpected";
-	protected const string ERR_DIVINGRAMMAR_EXPECTED =
-		"GrammarReader.DivInGrammarExpected";
-	protected const string ERR_UNEXPECTED_2NDELEMENT =
-		"GrammarReader.Unexpected2ndElement";
 	protected const string ERR_INCONSISTENT_COMBINE =
 		"GrammarReader.InconsistentCombine";
 	protected const string ERR_MULTIPLE_HEADS =
@@ -886,10 +948,6 @@ public class GrammarReader : ValidationContext {
 		"GrammarReader.RedefiningUndefinedStart";
 	protected const string ERR_REDEFINING_UNDEFINED =
 		"GrammarReader.RedefiningUndefined";
-	protected const string ERR_DIVININCLUDE_EXPECTED =
-		"GrammarReader.DivInIncludeExpected";
-	protected const string ERR_NO_CHILD_EXPRESSION =
-		"GrammarReader.NoChildExpression";
 	protected const string ERR_NAMECLASS_EXPECTED =
 		"GrammarReader.NameClassExpected";
 	protected const string ERR_USING_UNDECLARED_PREFIX =
@@ -904,16 +962,10 @@ public class GrammarReader : ValidationContext {
 		"GrammarReader.UndefinedTypeName";
 	protected const string ERR_BAD_VALUE_FOR_TYPE =
 		"GrammarReader.BadValueForType";
-	protected const string ERR_ONLY_ONE_EXCEPT_ALLOWED =
-		"GrammarReader.OnlyOneExceptAllowed";
-	protected const string ERR_UNEXPECTED_ELEMENT =
-		"GrammarReader.UnexpectedElement";
 	protected const string ERR_DATATYPE_ERROR =
 		"GrammarReader.DatatypeError";
 	protected const string ERR_BAD_DATATYPE_PARAMETER =
 		"GrammarReader.BadDatatypeParameter";
-	protected const string ERR_INVALID_PARAM_CONTENT =
-		"GrammarReader.InvalidParamContent";
 }
 
 
