@@ -45,12 +45,6 @@ public class Residual : ExpVisitorExp {
 		if( token.Accepts(exp) )	return Expression.Empty;
 		else						return Expression.NotAllowed;
 	}
-/*	
-	public Expression OnKey( KeyExp exp ) {
-		if( token.Accepts(exp) )	return Expression.Epsilon;
-		else						return Expression.EmptySet;
-	}
-*/	
 	public Expression OnMixed( MixedExp exp ) {
 		if( token.AcceptsText() )	return exp;
 		return builder.CreateMixed( exp.exp.Visit(this) );

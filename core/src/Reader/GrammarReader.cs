@@ -34,6 +34,7 @@ public class GrammarReader : ValidationContext {
 		
 		// reset variables
 		nsStack.Clear();
+		nsStack.Push("");
 		dtLibURIStack.Clear();
 		baseUriStack.Clear();
 		entityURLs.Clear();
@@ -159,7 +160,7 @@ public class GrammarReader : ValidationContext {
 		
 		entityURLs.Push(systemId);
 		readerStack.Push(reader);
-		nsStack.Push("");
+		// ns attribute will be propagated, so don't push it
 		dtLibURIStack.Push("");
 		baseUriStack.Push(new Uri(systemId));
 		
@@ -173,7 +174,6 @@ public class GrammarReader : ValidationContext {
 		Trace.WriteLine(string.Format("PopEntity({0})",reader.BaseURI));
 		reader.Close();
 		
-		nsStack.Pop();
 		dtLibURIStack.Pop();
 		baseUriStack.Pop();
 		reader = (XmlReader)readerStack.Pop();
@@ -928,7 +928,7 @@ public class GrammarReader : ValidationContext {
 			return new SimpleNameClass("undefined","undefined");
 		} else {
 			ReadStartElement();
-			string name = ReadPCDATA();
+			string name = ReadPCDATA().Trim();
 			if(name==null)	name="undefined";
 			NameClass nc = new SimpleNameClass(ProcessQName(name));
 			ReadEndElement();

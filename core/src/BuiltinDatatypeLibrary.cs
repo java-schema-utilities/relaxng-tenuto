@@ -57,7 +57,7 @@ internal abstract class BuiltinType : Datatype {
 	}
 	
 	public bool SameValue( object value1, object value2 ) {
-		return value1==value2;
+		return value1.Equals(value2);
 	}
 	
 	public abstract object CreateValue( string literal, ValidationContext context );

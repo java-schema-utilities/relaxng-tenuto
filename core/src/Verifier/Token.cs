@@ -54,13 +54,6 @@ internal class StringToken : TokenImpl {
 		}
 		return body.IsNullable;
 	}
-	
-/*	public override bool Accepts( KeyExp exp ) {
-		if( literal.Trim().Length==0 )	return false;
-		// reporting the key should be done by the caller.
-		return Residual.Calc( exp.exp, this, builder ).IsEpsilonReducible;
-	}
-*/	
 	public override bool Accepts( DataExp exp ) {
 		return exp.dt.IsValid(literal,context);
 	}
@@ -68,6 +61,8 @@ internal class StringToken : TokenImpl {
 	public override bool Accepts( ValueExp exp ) {
 		object o = exp.dt.CreateValue(literal,context);
 		if(o==null)		return false;
+//		System.Diagnostics.Trace.WriteLine(
+//			string.Format("value compare:{0}:{1}",o,exp.value));
 		return exp.dt.SameValue(o,exp.value);
 	}
 	

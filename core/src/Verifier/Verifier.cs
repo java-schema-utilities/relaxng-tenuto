@@ -92,20 +92,21 @@ public class Verifier : ValidationContext {
 		string literal = characters.ToString();
 		characters = new StringBuilder();
 		
+		Trace.WriteLine("characters: "+literal.Trim());
+		
 		StringToken token = new StringToken(literal,builder,this);
-
+		
 		exp = Residual.Calc( exp, token, builder );
 		if(exp==Expression.NotAllowed) {
 			// error: unexpected literal
 			if(literal.Length>20)	literal=literal.Substring(0,20)+" ...";
 			ReportError( ERR_INVALID_TEXT, literal );
 		}
-
+		
 		if(atoms!=null)
 			for( int i=atoms.Length-1; i>=0; i-- )
 				atoms[i] = Residual.Calc( atoms[i], token, builder );
-
-		document.Read();
+		
 		return exp;
 	}
 	
@@ -235,9 +236,10 @@ public class Verifier : ValidationContext {
 	
 	public void ReportError( string property, params object[] args ) {
 		if( resManager==null )
-			resManager = new ResourceManager("Tenuto.Verifier.Verifier",this.GetType().Assembly);
+			resManager = new ResourceManager("Verifier",this.GetType().Assembly);
 		
-		Console.WriteLine(resManager.GetString(property));
+		hadError = true;
+		
 		handler.Error(
 			string.Format( resManager.GetString(property), args ) );
 	}
