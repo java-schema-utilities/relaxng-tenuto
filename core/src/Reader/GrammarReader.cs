@@ -16,6 +16,15 @@ using org.relaxng.datatype;
 	"http://www.w3.org/XML/1998/namespace".
 	
 	TODO: XmlReader doesn't also properly honor xml:base
+	
+	Inheritance:
+		You may want to override the ResolveEntity method to perform
+		customized entity resolution.
+		
+		You may want to override the CreateXmlReader method to create
+		your choice of XmlReader. By default, this class uses XmlValidatingReader
+		with validating turned off (to properly expand entities), but
+		you can also use XmlTextReader, or other XmlReader implementations.
 */
 public class GrammarReader : ValidationContext {
 	
@@ -27,7 +36,7 @@ public class GrammarReader : ValidationContext {
 			sourceURL = Path.GetFullPath(sourceURL);
 		}
 		
-		return parse( new XmlTextReader(sourceURL) );
+		return parse( ResolveEntity(sourceURL) );
 	}
 	
 	public Grammar parse( XmlReader reader ) {
@@ -263,7 +272,7 @@ public class GrammarReader : ValidationContext {
 	// resolves the datatypeLibrary attribute value to a DatatypeLibrary object.
 	protected virtual DatatypeLibrary ResolveDatatypeLibrary( string uri ) {
 		if(uri.Equals(""))
-			return Tenuto.Datatype.DatatypeLibraryImpl.theInstance;
+			return org.relaxng.datatype.helpers.BuiltinDatatypeLibrary.theInstance;
 		throw new Exception(uri);
 	}
 	
@@ -537,7 +546,7 @@ public class GrammarReader : ValidationContext {
 		Datatype dt;
 		string type = GetAttribute("type");
 		if(type==null)
-			dt = Tenuto.Datatype.TokenType.theInstance;
+			dt = org.relaxng.datatype.helpers.TokenType.theInstance;
 		else {
 			try {
 				dt = datatypeLibrary.CreateDatatype(type);
@@ -720,9 +729,9 @@ public class GrammarReader : ValidationContext {
 		public int LinePosition = -1;
 		public string SourceFile = null;
 		public void MemorizeReference( XmlReader reader ) {
-			if( reader is XmlTextReader ) {
-				// source information is available only when we are using XmlTextReader
-				XmlTextReader r = (XmlTextReader)reader;
+			if( reader is IXmlLineInfo ) {
+				// source information is available only when the reader implements IXmlLineInfo
+				IXmlLineInfo r = (IXmlLineInfo)reader;
 				LineNumber = r.LineNumber;
 				LinePosition = r.LinePosition;
 				SourceFile = r.BaseURI;	// TODO: is this correct?
@@ -893,11 +902,16 @@ public class GrammarReader : ValidationContext {
 			return null;
 		}
 		
-		return new XmlTextReader( uri.AbsoluteUri,
+		return CreateXmlReader( uri.AbsoluteUri,
 			(Stream)Resolver.GetEntity( uri, null, typeof(Stream)));
 	}
 	
-	
+	protected virtual XmlReader CreateXmlReader( string uri, Stream input ) {
+//		return new XmlTextReader(uri,input);
+		XmlValidatingReader reader = new XmlValidatingReader(new XmlTextReader(uri,input));
+		reader.ValidationType = ValidationType.None;
+		return reader;
+	}
 	
 //
 // Name Class Element Reader
@@ -1070,8 +1084,8 @@ public class GrammarReader : ValidationContext {
 
 
 public interface GrammarReaderController {
-	void error( string msg, XmlReader reader );
-	void warning( string msg, XmlReader reader );
+	void error( string msg, IXmlLineInfo location );
+	void warning( string msg, IXmlLineInfo location );
 }
 
 }
