@@ -14,6 +14,8 @@ using org.relaxng.datatype;
 	TODO: there seems to be a bug in the "xml" namespace handling.
 	XmlReader doesn't consider the "xml" prefix to be bounded to
 	"http://www.w3.org/XML/1998/namespace".
+	
+	TODO: XmlReader doesn't also properly honor xml:base
 */
 public class GrammarReader : ValidationContext {
 	
@@ -25,21 +27,20 @@ public class GrammarReader : ValidationContext {
 			sourceURL = Path.GetFullPath(sourceURL);
 		}
 		
-		return parse( new XmlTextReader(sourceURL), sourceURL );
-//			(Stream)new XmlUrlResolver().GetEntity( new Uri(sourceURL), null, typeof(Stream) 	}
+		return parse( new XmlTextReader(sourceURL) );
 	}
 	
-//	public Grammar parse( Stream source ) {
-//		return parse( new XmlTextReader(source) );
-//	}
-	
-	public Grammar parse( XmlReader reader, string systemId ) {
+	public Grammar parse( XmlReader reader ) {
 		
-		XmlReader oldReader = this.reader;
-		string oldSystemId = this.systemId;
+		// reset variables
+		nsStack.Clear();
+		dtLibURIStack.Clear();
+		xmlBaseStack.Clear();
+		entityURLs.Clear();
+		readerStack.Clear();
+		readerStack.Push(null);
 		
-		this.reader = reader;
-		this.systemId = systemId;
+		PushEntity(reader);
 		try {
 			// skip xml declaration, DOCTYPE etc.
 			while(!reader.IsStartElement())	reader.Read();
@@ -56,8 +57,7 @@ public class GrammarReader : ValidationContext {
 				return g;
 			}
 		} finally {
-			this.reader = oldReader;
-			this.systemId = oldSystemId;
+			PopEntity();
 		}
 	}
 	
@@ -81,7 +81,6 @@ public class GrammarReader : ValidationContext {
 	
 	
 	protected XmlReader reader;
-	protected string systemId;
 	protected Grammar grammar;
 	
 	// RELAX NG namespace
@@ -126,10 +125,6 @@ public class GrammarReader : ValidationContext {
 			dic["anyName"]	= new NCReader(AnyName);
 			NCReaders = dic;
 		}
-		
-		nsStack.Push("");
-		dtLibURIStack.Push("");
-		xmlBaseStack.Push(null);
 	}
 	
 //
@@ -141,8 +136,47 @@ public class GrammarReader : ValidationContext {
 	private readonly Stack nsStack = new Stack();
 	private readonly Stack dtLibURIStack = new Stack();
 	
-	// at least with Beta2 SDK, XmlReader.BaseURI doesn't seem to work
+	// at least with Beta2 SDK, XmlReader.BaseURI doesn't handle
+	// xml:base attribute, so we have to process them manually.
 	private readonly Stack xmlBaseStack = new Stack();
+	
+	private readonly Stack readerStack = new Stack();
+	
+	// source URL of entities
+	private readonly Stack entityURLs = new Stack();
+	
+	// Set up variables to process a next xml file
+	protected bool PushEntity( XmlReader newReader ) {
+		string systemId = newReader.BaseURI;
+		
+		if(entityURLs.Contains(systemId)) {
+			ReportError( ERR_RECURSIVE_INCLUSION, systemId );
+			return false;
+		}
+		
+		entityURLs.Push(systemId);
+		readerStack.Push(reader);
+		nsStack.Push("");
+		dtLibURIStack.Push("");
+		xmlBaseStack.Push(null);
+		
+		reader = newReader;
+		Trace.WriteLine(string.Format("PushEntity({0})",reader.BaseURI));
+		return true;
+	}
+	
+	// Closes the current reader and gets back to the parent
+	protected void PopEntity() {
+		Trace.WriteLine(string.Format("PopEntity({0})",reader.BaseURI));
+		reader.Close();
+		
+		nsStack.Pop();
+		dtLibURIStack.Pop();
+		xmlBaseStack.Pop();
+		reader = (XmlReader)readerStack.Pop();
+		entityURLs.Pop();
+	}
+	
 	
 	/**
 	 * return false if this element is an empty element
@@ -150,14 +184,14 @@ public class GrammarReader : ValidationContext {
 	protected bool ReadStartElement() {
 		Trace.WriteLine("read <"+reader.Name+">");
 		
-		string ns = reader.GetAttribute("ns");
+		string ns = GetAttribute("ns");
 		if(ns==null)		ns=(string)nsStack.Peek();
 		nsStack.Push(ns);
 		
 		bool isEmpty = reader.IsEmptyElement;
 		
-		string dtLibURI = reader.GetAttribute("datatypeLibrary");
-		string xmlBase = reader.GetAttribute("xml:base");
+		string dtLibURI = GetAttribute("datatypeLibrary");
+		string xmlBase = GetAttribute("xml:base");
 		if(dtLibURI==null)
 			dtLibURI=(string)dtLibURIStack.Peek();
 		if(xmlBase==null)
@@ -180,24 +214,36 @@ public class GrammarReader : ValidationContext {
 		reader.ReadEndElement();
 	}
 	
+	protected string GetAttribute( string name ) {
+		string str = reader.GetAttribute(name);
+		if(str==null)	return null;
+		else			return str.Trim();
+	}
+	
+	protected string GetAttribute( string ns, string local ) {
+		string str = reader.GetAttribute(ns,local);
+		if(str==null)	return null;
+		else			return str.Trim();
+	}
+	
 	// gets the propagated value of the ns attribute.
 	protected string ns {
 		get {
-			string ns = reader.GetAttribute("ns");
+			string ns = GetAttribute("ns");
 			if(ns!=null)	return ns;
 			else			return (string)nsStack.Peek();
 		}
 	}
 	protected string xmlBase {
 		get {
-			string v = reader.GetAttribute("xml:base");
+			string v = GetAttribute("xml:base");
 			if(v!=null)		return v;
 			else			return (string)xmlBaseStack.Peek();
 		}
 	}
 	protected string datatypeLibraryURI {
 		get {
-			string uri = reader.GetAttribute("datatypeLibrary");
+			string uri = GetAttribute("datatypeLibrary");
 			if(uri!=null)	return uri;
 			else			return (string)dtLibURIStack.Peek();
 		}
@@ -216,15 +262,16 @@ public class GrammarReader : ValidationContext {
 		throw new Exception(uri);
 	}
 	
-	private class InvalidQNameException : Exception {}
 	// converts a QName to an XmlName.
-	// throws an InvalidQNameException when qname contains undeclared prefix.
 	protected XmlName ProcessQName( string qname ) {
 		int idx = qname.IndexOf(':');
 		if(idx<0)	return new XmlName(ns,qname);	// no prefix
 		
 		string uri = reader.LookupNamespace(qname.Substring(0,idx));
-		if(uri==null)	throw new InvalidQNameException();
+		if(uri==null) {
+			ReportError( ERR_INVALID_QNAME, qname );
+			return new XmlName("undefined","undefined");
+		}
 		return new XmlName(uri,qname.Substring(idx+1));
 	}
 	
@@ -266,8 +313,10 @@ public class GrammarReader : ValidationContext {
 	/**
 	 * reads text inside an element and returns it.
 	 * 
-	 * the caller should call the ReadStartElement before
+	 * caller should call the ReadStartElement before
 	 * calling this method. null is returned when an error occurs.
+	 *
+	 * caller is also responsible to call the ReadEndElement method
 	 */
 	protected string ReadPCDATA() {
 		string s  = "";
@@ -298,7 +347,7 @@ public class GrammarReader : ValidationContext {
 	}
 	
 	protected string GetRequiredAttribute( string attrName ) {
-		string r = reader.GetAttribute(attrName);
+		string r = GetAttribute(attrName);
 		if(r!=null)		return r;
 		
 		ReportError( ERR_MISSING_ATTRIBUTE, reader.Name, attrName );
@@ -356,14 +405,14 @@ public class GrammarReader : ValidationContext {
 		if(href==null)
 			return Expression.NotAllowed;
 		
-		reader = newReader;
+		if(!PushEntity(newReader))
+			return Expression.NotAllowed;
 		try {
 			// skip XML declarations, DOCTYPE, etc.
 			while(!reader.IsStartElement())	reader.Read();
 			return ReadExp();	// parse it.
 		} finally {
-			reader.Close();
-			reader = previous;
+			PopEntity();
 		}
 	}
 	protected virtual Expression Ref() {
@@ -452,7 +501,7 @@ public class GrammarReader : ValidationContext {
 		return new AttributeExp(nc,contents);
 	}
 	protected virtual NameClass ReadNameClassOrNameAttr( out bool isEmpty ) {
-		string name = reader.GetAttribute("name");
+		string name = GetAttribute("name");
 		isEmpty = !ReadStartElement();
 		if(name!=null) {
 			return new SimpleNameClass(ProcessQName(name));
@@ -462,7 +511,7 @@ public class GrammarReader : ValidationContext {
 
 	protected virtual Expression Value() {
 		Datatype dt;
-		string type = reader.GetAttribute("type");
+		string type = GetAttribute("type");
 		if(type==null)
 			dt = Tenuto.Datatype.TokenType.theInstance;
 		else {
@@ -482,10 +531,14 @@ public class GrammarReader : ValidationContext {
 				value = dt.CreateValue("",this);
 			else {
 				string s = ReadPCDATA();
-				ReadEndElement();
+				if(s==null) {
+					ReadEndElement();
+					return Expression.NotAllowed;
+				}
 				
-				if(s==null)		return Expression.NotAllowed;
+				// value must be created while we are still at the endElement
 				value = dt.CreateValue(s,this);
+				ReadEndElement();
 			}
 		
 			return Builder.CreateValue(dt,value);
@@ -496,7 +549,7 @@ public class GrammarReader : ValidationContext {
 	}
 
 	protected virtual Expression Data() {
-		string type = reader.GetAttribute("type");
+		string type = GetAttribute("type");
 		if(type==null) {
 			ReportError( ERR_MISSING_ATTRIBUTE, reader.Name, "type" );
 			reader.Skip();
@@ -555,9 +608,16 @@ public class GrammarReader : ValidationContext {
 		}
 		
 		try {
-			string value = ReadPCDATA();
-			if(value==null)	return;
-			builder.AddParameter(name,value,this);
+			if(reader.IsEmptyElement) {
+				builder.AddParameter(name,"",this);
+				ReadStartElement();
+			} else {
+				ReadStartElement();
+				string value = ReadPCDATA();
+				if(value!=null)
+					builder.AddParameter(name,value,this);
+				ReadEndElement();
+			}
 		} catch( DatatypeException e ) {
 			ReportError( ERR_BAD_DATATYPE_PARAMETER, name, e.Message );
 		}
@@ -591,7 +651,7 @@ public class GrammarReader : ValidationContext {
 		ReadEndElement();
 	}
 	protected virtual ReferenceExp Start() {
-		string combine = reader.GetAttribute("combine");
+		string combine = GetAttribute("combine");
 		Expression exp = null;
 		if(ReadStartElement()) {
 			while(SkipForeignElements()) {
@@ -611,8 +671,8 @@ public class GrammarReader : ValidationContext {
 		return grammar;
 	}
 	protected virtual ReferenceExp Define() {
-		string combine = reader.GetAttribute("combine");
-		string name = reader.GetAttribute("name");
+		string combine = GetAttribute("combine");
+		string name = GetAttribute("name");
 		if(name==null) {
 			// error: missing attribute
 			ReportError( ERR_MISSING_ATTRIBUTE, reader.Name, "name" );
@@ -657,15 +717,13 @@ public class GrammarReader : ValidationContext {
 		if( redefiningRefExps.ContainsKey(r) ) {
 			// this pattern is currently being redefined.
 			redefiningRefExps[r] = true;
-			return;
+			return;	// ignore the value
 		}
-		
-		if(combine!=null)		combine = combine.Trim();
 		
 		RefParseInfo pi = (RefParseInfo)refParseInfos[r];
 		if(pi==null)	refParseInfos[r] = pi = new RefParseInfo();
 		
-		if( pi.Combine!=null && pi.Combine==combine ) {
+		if( pi.Combine!=null && combine!=null && pi.Combine!=combine ) {
 			// error: inconsistent combine method
 			ReportError( ERR_INCONSISTENT_COMBINE, r.name );
 			pi.Combine = null;
@@ -700,47 +758,51 @@ public class GrammarReader : ValidationContext {
 	private Hashtable redefiningRefExps = new Hashtable();
 	
 	protected virtual void MergeGrammar() {
-		string href = reader.GetAttribute("href");
+		string href = GetAttribute("href");
 		if(href==null) {
 			// error: missing attribute
 			ReportError( ERR_MISSING_ATTRIBUTE, reader.Name, "href" );
 			reader.Skip();
 			return;
 		}
+		XmlReader newReader = ResolveEntity(href);
+			// this method has to be called while we are at the start element state.
 		
-		// collect redefined patterns.
-		DivInInclude();
-		
-		XmlReader previous = reader;
-		reader = ResolveEntity(href);
 		Hashtable old = redefiningRefExps;
+		redefiningRefExps = new Hashtable();
+		
 		try {
-			// skip XML declarations, DOCTYPE, etc.
-			while(!reader.IsStartElement())	reader.Read();
+			// collect redefined patterns.
+			DivInInclude();
 			
-			if(reader.LocalName!="grammar") {
-				// error: unexpected tag name
-				ReportError( ERR_GRAMMAR_EXPECTED, reader.Name );
-				return;
-			}
+			if(!PushEntity(newReader))	return;
 			
-			redefiningRefExps = new Hashtable();
-			
-			// parse included pattern.
-			DivInGrammar();
-			
-			// make sure that there were definitions for redefined exps.
-			foreach( ReferenceExp exp in redefiningRefExps.Keys )
-				if( (bool)redefiningRefExps[exp] == false ) {
-					// error: this pattern was not defined.
-					if( exp is Grammar )
-						ReportError( ERR_REDEFINING_UNDEFINED_START );
-					else
-						ReportError( ERR_REDEFINING_UNDEFINED, exp.name );
+			try {
+				// skip XML declarations, DOCTYPE, etc.
+				while(!reader.IsStartElement())	reader.Read();
+				
+				if(reader.LocalName!="grammar") {
+					// error: unexpected tag name
+					ReportError( ERR_GRAMMAR_EXPECTED, reader.Name );
+					return;
 				}
+				
+				// parse included pattern.
+				DivInGrammar();
+				
+				// make sure that there were definitions for redefined exps.
+				foreach( ReferenceExp exp in redefiningRefExps.Keys )
+					if( (bool)redefiningRefExps[exp] == false ) {
+						// error: this pattern was not defined.
+						if( exp is Grammar )
+							ReportError( ERR_REDEFINING_UNDEFINED_START );
+						else
+							ReportError( ERR_REDEFINING_UNDEFINED, exp.name );
+					}
+			} finally {
+				PopEntity();
+			}
 		} finally {
-			reader.Close();
-			reader = previous;
 			redefiningRefExps = old;
 		}
 	}
@@ -791,9 +853,7 @@ public class GrammarReader : ValidationContext {
 	// resolves the "href" value and obtains XmlReader that reads that source.
 	protected virtual XmlReader ResolveEntity( string href ) {
 		
-		// at least with SDK beta2, XmlReader.BaseUri is not working.
-		Trace.WriteLine(systemId);
-		Uri uri = new Uri(systemId);
+		Uri uri = new Uri(reader.BaseURI);
 		string xmlBase = this.xmlBase;
 		if(xmlBase!=null)
 			uri = Resolver.ResolveUri( uri, xmlBase );
@@ -802,10 +862,15 @@ public class GrammarReader : ValidationContext {
 		
 		Trace.WriteLine(string.Format(
 			"SystemId:{0} base:{1} href:{2}\nentity uri:{3}",
-			systemId,xmlBase,href,uri));
+			reader.BaseURI, xmlBase, href, uri));
 		
-		return new XmlTextReader((Stream)Resolver.GetEntity(
-			uri, null, typeof(Stream)));
+		if(uri.Fragment!=String.Empty) {
+			ReportError( ERR_FRAGMENT_IN_URI, uri );
+			return null;
+		}
+		
+		return new XmlTextReader( uri.AbsoluteUri,
+			(Stream)Resolver.GetEntity( uri, null, typeof(Stream)));
 	}
 	
 	
@@ -823,7 +888,7 @@ public class GrammarReader : ValidationContext {
 	// XmlReader is on a start tag. Parses it and returns the result.
 	protected virtual NameClass ReadNameClass() {
 		if(SkipForeignElements()) {
-			Trace.WriteLine("dispatching NC: "+reader.LocalName+")");
+			Trace.WriteLine("dispatching NC: "+reader.LocalName);
 			
 			NCReader ncreader = (NCReader)NCReaders[reader.LocalName];
 			if(ncreader==null) {
@@ -850,14 +915,17 @@ public class GrammarReader : ValidationContext {
 		return new NsNameClass(ns,ReadExceptName());
 	}
 	protected virtual NameClass SimpleName() {
-		string name = ReadPCDATA();
-		if(name==null)	name="undefined";
-		try {
-			return new SimpleNameClass(ProcessQName(name));
-		} catch( InvalidQNameException ) {
-			// error: invalid prefix
-			ReportError( ERR_USING_UNDECLARED_PREFIX, name );
-			return new SimpleNameClass("foo","bar");	// recover
+		if( reader.IsEmptyElement ) {
+			ReadStartElement();
+			// TODO: error message
+			return new SimpleNameClass("undefined","undefined");
+		} else {
+			ReadStartElement();
+			string name = ReadPCDATA();
+			if(name==null)	name="undefined";
+			NameClass nc = new SimpleNameClass(ProcessQName(name));
+			ReadEndElement();
+			return nc;
 		}
 	}
 	protected virtual NameClass ChoiceName() {
@@ -897,6 +965,7 @@ public class GrammarReader : ValidationContext {
 					reader.Skip();
 				}
 			}
+			ReadEndElement();
 		}
 		return nc;	// return null if <except> was not found.
 	}
@@ -950,8 +1019,6 @@ public class GrammarReader : ValidationContext {
 		"GrammarReader.RedefiningUndefined";
 	protected const string ERR_NAMECLASS_EXPECTED =
 		"GrammarReader.NameClassExpected";
-	protected const string ERR_USING_UNDECLARED_PREFIX =
-		"GrammarReader.UsingUndeclaredPrefix";
 	protected const string ERR_NO_CHILD_NAMECLASS =
 		"GrammarReader.NoChildNameClass";
 	protected const string ERR_MULTIPLE_EXCEPT =
@@ -966,6 +1033,12 @@ public class GrammarReader : ValidationContext {
 		"GrammarReader.DatatypeError";
 	protected const string ERR_BAD_DATATYPE_PARAMETER =
 		"GrammarReader.BadDatatypeParameter";
+	protected const string ERR_FRAGMENT_IN_URI =
+		"GrammarReader.FragmentInUri";
+	protected const string ERR_RECURSIVE_INCLUSION =
+		"GrammarReader.RecursiveInclusion";
+	protected const string ERR_INVALID_QNAME =
+		"GrammarReader.InvalidQName";
 }
 
 
