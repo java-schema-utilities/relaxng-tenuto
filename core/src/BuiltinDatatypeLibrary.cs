@@ -11,14 +11,14 @@ internal class DatatypeLibraryImpl : DatatypeLibrary {
 	
 	public DatatypeBuilder CreateDatatypeBuilder( string name ) {
 		Datatype dt = CreateDatatype(name);
-		if(dt==null)	return null;
+		if(dt==null)	throw new DatatypeException();
 		return new DatatypeBuilderImpl(dt);
 	}
 	
 	public Datatype CreateDatatype( string name ) {
 		if(name=="string")	return StringType.theInstance;
 		if(name=="token")	return TokenType.theInstance;
-		return null;
+		throw new DatatypeException();
 	}
 }
 
