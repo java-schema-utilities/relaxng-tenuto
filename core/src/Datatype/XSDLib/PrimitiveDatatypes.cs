@@ -6,13 +6,13 @@ using Tenuto;
 
 
 // length calculator
-internal delegate int Measure( object o );
+public delegate int Measure( object o );
 // order comparison
-internal enum Order { LESS, EQUAL, GREATER, UNDECIDABLE };
-internal delegate Order Comparator( object o1, object o2 );
+public enum Order { LESS, EQUAL, GREATER, UNDECIDABLE };
+public delegate Order Comparator( object o1, object o2 );
 
 // base implementation
-internal abstract class DatatypeImpl : Datatype {
+public abstract class DatatypeImpl : Datatype {
 	
 	protected DatatypeImpl( WSNormalizationMode mode ) {
 		wsProcessor = WhitespaceNormalizer.GetProcessor(mode);
@@ -22,48 +22,52 @@ internal abstract class DatatypeImpl : Datatype {
 	}
 	
 	
-	// methods implemented by derived classes
-	protected virtual bool LexicalCheck( string normalizedStr ) {
+	// methods that should be implemented by derived classes
+	protected internal virtual bool LexicalCheck( string normalizedStr ) {
 		return true;
 	}
-	protected virtual bool ValueCheck( string normalizedStr, ValidationContext ctxt ) {
+	protected internal virtual bool ValueCheck( string normalizedStr, ValidationContext ctxt ) {
 		return true;
 	}
-	protected abstract object GetValue( string normalizedStr, ValidationContext ctxt );
+	protected internal virtual object GetValue( string normalizedStr, ValidationContext ctxt ) {
+		return normalizedStr;
+	}
 	
-	public sealed bool IsValid( string str, ValidationContext ctxt ) {
+	
+	
+	public bool IsValid( string str, ValidationContext ctxt ) {
 		str = wsProcessor(str);
 		return LexicalCheck(str) && ValueCheck(str,ctxt);
 	}
 	
-	public sealed void CheckValid( string str, ValidationContext ctxt ) {
+	public void CheckValid( string str, ValidationContext ctxt ) {
 		if(!IsValid(str,ctxt))
 			throw new DatatypeException();
 	}
 	
-	public sealed object CreateValue( string str, ValidationContext ctxt ) {
+	public object CreateValue( string str, ValidationContext ctxt ) {
 		str = wsProcessor(str);
 		if(!LexicalCheck(str))	return null;
 		return GetValue(str,ctxt);
 	}
 	
-	public bool IsContextDependent {
+	public virtual bool IsContextDependent {
 		get { return false; }
 	}
 	
-	public IDType IdType {
-		get { return IDType.ID_TYPE_NULL; }
+	public virtual org.relaxng.datatype.IDType IdType {
+		get { return org.relaxng.datatype.IDType.ID_TYPE_NULL; }
 	}
 	
-	public int ValueHashCode( object o ) {
+	public virtual int ValueHashCode( object o ) {
 		return o.GetHashCode();
 	}
 	
-	public bool SameValue( object o1, object o2 ) {
+	public virtual bool SameValue( object o1, object o2 ) {
 		return o1.Equals(o2);
 	}
 	
-	public sealed DatatypeStreamingValidator CreateStreamingValidator( ValidationContext ctxt ) {
+	public DatatypeStreamingValidator CreateStreamingValidator( ValidationContext ctxt ) {
 		return new StreamingValidatorImpl(this,ctxt);
 	}
 	
@@ -75,24 +79,24 @@ internal abstract class DatatypeImpl : Datatype {
 	public readonly WhitespaceNormalizer.Processor wsProcessor;
 	
 	
-	protected virtual Measure getMeasure() { return null; }
-	protected virtual Comparator getComparator() { return null; }
+	protected internal virtual Measure GetMeasure() { return null; }
+	protected internal virtual Comparator GetComparator() { return null; }
 }
 
 
 
 public class BooleanType : DatatypeImpl {
 	
-	public static BooleanType theInstance = new BooleanType();
+	public BooleanType() : base(WSNormalizationMode.Collapse) {}
 	
-	protected BooleanType() : base(WSNormalizationMode.Collapse) {}
-	
-	public bool LexicalCheck( string s ) {
+	protected internal override
+	bool LexicalCheck( string s ) {
 		return s=="true" || s=="false" || s=="0" || s=="1";
 	}
 	
-	public object GetValue( string s, ValidationContext ctxt ) {
-		char ch = s.CharAt(0);
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
+		char ch = s[0];
 		if(ch=='t' || ch=='1')	return true;
 		else					return false;
 	}
@@ -101,20 +105,21 @@ public class BooleanType : DatatypeImpl {
 
 
 public class QNameType : DatatypeImpl {
-	public static QNameType theInstance = new QNameType();
+	public QNameType() : base(WSNormalizationMode.Collapse) {}
 	
-	protected QNameType() : base(WSNormalizedMode.Collapse) {}
-	
-	protected bool LexicalCheck( string s ) {
-		return XmlChar.IsQName(s);
+	protected internal override
+	bool LexicalCheck( string s ) {
+		return XMLChar.IsQName(s);
 	}
 	
-	protected bool ValueCheck( string s, ValidationContext ctxt ) {
+	protected internal override
+	bool ValueCheck( string s, ValidationContext ctxt ) {
 		int idx = s.IndexOf(':');
 		if(idx<0)	return true;
 		return ctxt.ResolveNamespacePrefix(s.Substring(0,idx))!=null;
 	}
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		int idx = s.IndexOf(':');
 		if(idx<0) {
 			string uri = ctxt.ResolveNamespacePrefix("");

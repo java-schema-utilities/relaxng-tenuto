@@ -1,17 +1,19 @@
 namespace Tenuto.Datatype.XSDLib {
 
 using System;
+using org.relaxng.datatype;
 
 // numeric types have fully-ordered value space
 // value objects must implement IComparable
 public abstract class NumericType : DatatypeImpl {
-	protected DecimalType() : base(WSNormalizationMode.Collapse) {}
+	protected NumericType() : base(WSNormalizationMode.Collapse) {}
 	
-	protected Comparator GetComparator() {
+	protected internal override sealed Comparator GetComparator() {
 		return new Comparator(CompareNumber);
 	}
 	
-	protected override sealed bool ValueCheck( string s, ValidationContext ctxt ) {
+	protected internal override sealed
+	bool ValueCheck( string s, ValidationContext ctxt ) {
 		return GetValue(s,ctxt)!=null;
 	}
 	
@@ -24,44 +26,41 @@ public abstract class NumericType : DatatypeImpl {
 }
 
 public class FloatType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return float.Parse(s);
 	}
 }
 
 public class DoubleType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return double.Parse(s);
 	}
 }
 
 public class DecimalType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		// TODO: what's the equivalent of BigDecimal?
 		throw new Exception();
 	}
 }
 
 public class IntegerType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		// TODO: use a proper class.
 		// Decimal is just a 96-bit length integer,
 		// not what we need for "integer"
-		return deciml.Parse(s);
+		return decimal.Parse(s);
 		// applicable to (non)?(positive|negative)Integer
 	}
 }
 
 public class PositiveIntegerType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
-		decimal d = deciml.Parse(s);
-		if(d>0)		return d;
-		else		return null;
-	}
-}
-
-public class PositiveIntegerType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		decimal d = decimal.Parse(s);
 		if(d>0)		return d;
 		else		return null;
@@ -69,7 +68,8 @@ public class PositiveIntegerType : NumericType {
 }
 
 public class NonPositiveIntegerType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		decimal d = decimal.Parse(s);
 		if(d<=0)	return d;
 		else		return null;
@@ -77,7 +77,8 @@ public class NonPositiveIntegerType : NumericType {
 }
 
 public class NegativeIntegerType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		decimal d = decimal.Parse(s);
 		if(d<0)		return d;
 		else		return null;
@@ -85,51 +86,66 @@ public class NegativeIntegerType : NumericType {
 }
 
 public class NonNegativeIntegerType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		decimal d = decimal.Parse(s);
 		if(d>=0)	return d;
 		else		return null;
 	}
 }
 
+public class LongType : NumericType {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
+		return long.Parse(s);
+	}
+}
+
 public class UnsignedLongType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return ulong.Parse(s);
 	}
 }
 
 public class IntType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return int.Parse(s);
 	}
 }
 
 public class UnsignedIntType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return uint.Parse(s);
 	}
 }
 
 public class ShortType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return short.Parse(s);
 	}
 }
 
 public class UnsignedShortType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return ushort.Parse(s);
 	}
 }
 
 public class ByteType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return sbyte.Parse(s);
 	}
 }
 
 public class UnsignedByteType : NumericType {
-	protected object GetValue( string s, ValidationContext ctxt ) {
+	protected internal override
+	object GetValue( string s, ValidationContext ctxt ) {
 		return byte.Parse(s);
 	}
 }
