@@ -25,10 +25,8 @@
 			<zipfileset dir="driver/src" prefix="${prefix}src/driver/src">
 				<patternset refid="source.files"/>
 			</zipfileset>
-			<zipfileset dir="." includes="lib/*.*" prefix="${prefix}src" />
-			<zipfileset dir="." includes="bin/tenuto.exe, bin/tenutoCore.dll, bin/relaxngDatatype.dll" prefix="${prefix}" />
+			<zipfileset dir="Driver/bin/Release" includes="**/*.*" prefix="${prefix}" />
 			<zipfileset dir="doc" includes="*.*" prefix="${prefix}" />
-			<zipfileset dir="." includes="tenuto.build" prefix="${prefix}src" />
 		</zip>
 	</target>
 </project>
