@@ -9,6 +9,14 @@ public struct XmlName {
 	}
 	public readonly String uri;
 	public readonly String local;
+
+	public override bool Equals( object rhs ) {
+		if(!(rhs is XmlName))	return false;
+		return this==((XmlName)rhs);
+	}
+	public override int GetHashCode() {
+		return uri.GetHashCode() ^ local.GetHashCode();
+	}
 	
 	public static bool operator == ( XmlName lhs, XmlName rhs ) {
 		return lhs.uri==rhs.uri && lhs.local==rhs.local;
