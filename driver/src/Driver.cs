@@ -48,7 +48,7 @@ public class Driver {
 			Console.WriteLine("bailing out");
 			return -1;
 		}
-		Console.WriteLine( Grammar.ExpPrinter.printGrammar(grammar) );
+//		Console.WriteLine( Grammar.ExpPrinter.printGrammar(grammar) );
 		
 		bool noError = true;
 		
