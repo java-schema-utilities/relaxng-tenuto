@@ -1,0 +1,3 @@
+Ver.2002/06/23
+--------------
+    Re-compiled with Visual Studio.Net to fix a reported problem.

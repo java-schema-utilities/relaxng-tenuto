@@ -74,4 +74,4 @@ Tenuto is distributed under the BSD license. See copying.txt for details.
 
 
 
-$Version:$
+$Revision: 1.3 $
