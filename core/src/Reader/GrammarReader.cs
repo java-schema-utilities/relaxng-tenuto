@@ -488,7 +488,7 @@ public class GrammarReader : ValidationContext {
 	}
 	protected virtual Expression Element() {
 		bool isEmpty;
-		NameClass nc = ReadNameClassOrNameAttr(out isEmpty);
+		NameClass nc = ReadNameClassOrNameAttr( false, out isEmpty );
 		if(isEmpty) {
 			ReportError( ERR_EXPRESSION_EXPECTED );
 			return Expression.NotAllowed;
@@ -498,7 +498,7 @@ public class GrammarReader : ValidationContext {
 	}
 	protected virtual Expression Attribute() {
 		bool isEmpty;
-		NameClass nc = ReadNameClassOrNameAttr(out isEmpty);
+		NameClass nc = ReadNameClassOrNameAttr( true, out isEmpty );
 		Expression contents = Expression.Text;
 		
 		if(!isEmpty) {
@@ -507,12 +507,23 @@ public class GrammarReader : ValidationContext {
 		}
 		return new AttributeExp(nc,contents);
 	}
-	protected virtual NameClass ReadNameClassOrNameAttr( out bool isEmpty ) {
+	protected virtual NameClass ReadNameClassOrNameAttr( bool isAttribute, out bool isEmpty ) {
 		string name = GetAttribute("name");
-		isEmpty = !ReadStartElement();
 		if(name!=null) {
-			return new SimpleNameClass(ProcessQName(name));
+			NameClass nc;
+			
+			// there is @name
+			if( isAttribute
+			&&  reader.GetAttribute("ns")==null	// there is no @ns
+			&&  name.IndexOf(':')==-1 )	// name is NCName
+				nc = new SimpleNameClass(new XmlName("",name));
+			else
+				nc = new SimpleNameClass(ProcessQName(name));
+			
+			isEmpty = !ReadStartElement();
+			return nc;
 		}
+		isEmpty = !ReadStartElement();
 		return ReadNameClass();
 	}
 
@@ -928,9 +939,9 @@ public class GrammarReader : ValidationContext {
 			return new SimpleNameClass("undefined","undefined");
 		} else {
 			ReadStartElement();
-			string name = ReadPCDATA().Trim();
+			string name = ReadPCDATA();
 			if(name==null)	name="undefined";
-			NameClass nc = new SimpleNameClass(ProcessQName(name));
+			NameClass nc = new SimpleNameClass(ProcessQName(name.Trim()));
 			ReadEndElement();
 			return nc;
 		}

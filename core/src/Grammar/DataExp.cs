@@ -12,7 +12,7 @@ public sealed class DataExp : Expression {
 	public readonly string name;
 	
 	internal DataExp( Datatype _dt, Expression _except, string _name )
-			: base(_dt.GetHashCode()*HASH_DATA, _dt.IsValid("",DummyValidationContext.instance) ) {
+			: base(_dt.GetHashCode()*HASH_DATA, false ) {
 		// TODO: probably the epsilon reducibility is wrong.
 		// can we treat epsilon-reducibility as an approximation?
 		// rather than the precise value?
@@ -44,8 +44,7 @@ public sealed class ValueExp : Expression {
 	public readonly object value;
 	
 	internal ValueExp( Datatype dt, object value )
-			: base(dt.GetHashCode()*dt.ValueHashCode(value)*HASH_VALUE,
-				dt.IsValid("",DummyValidationContext.instance) ) {
+			: base(dt.GetHashCode()*dt.ValueHashCode(value)*HASH_VALUE, false ) {
 		// TODO: probably the epsilon reducibility is wrong.
 		// can we treat epsilon-reducibility as an approximation?
 		// rather than the precise value?

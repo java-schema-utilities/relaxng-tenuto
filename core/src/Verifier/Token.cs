@@ -1,6 +1,7 @@
 namespace Tenuto.Verifier {
 
 using System;
+using System.Diagnostics;
 using Tenuto.Grammar;
 using org.relaxng.datatype;
 
@@ -50,12 +51,16 @@ internal class StringToken : TokenImpl {
 		Expression body = exp.exp;
 		for( int i=0; i<listItems.Length; i++ ) {
 			body = Residual.Calc( body, listItems[i], builder );
+//			Trace.WriteLine("residual: "+ ExpPrinter.printContentModel(body));
 			if( body==Expression.NotAllowed )	return false;
 		}
 		return body.IsNullable;
 	}
 	public override bool Accepts( DataExp exp ) {
-		return exp.dt.IsValid(literal,context);
+		return exp.dt.IsValid(literal,context)
+		&& (
+			exp.except==null
+		||	!Residual.Calc(exp.except,this,builder).IsNullable);
 	}
 	
 	public override bool Accepts( ValueExp exp ) {

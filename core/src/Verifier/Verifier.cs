@@ -28,6 +28,8 @@ public class Verifier : ValidationContext {
 		this.handler = handler;
 		this.builder = builder;
 		this.attPruner = new AttPruner(builder);
+		
+		emptyStringToken = new StringToken("",builder,this);
 	}
 	
 	
@@ -36,6 +38,8 @@ public class Verifier : ValidationContext {
 	protected bool					hadError = false;
 	protected readonly ExpBuilder	builder;
 	protected readonly AttPruner	attPruner;
+	
+	private readonly StringToken	emptyStringToken;
 	
 	private Expression Verify( Expression contentModel ) {
 		return Verify(contentModel,null);
@@ -165,7 +169,10 @@ public class Verifier : ValidationContext {
 			Trace.Unindent();
 			Trace.WriteLine("</"+document.Name+">");
 		}
-			
+		
+		if( !combinedChild.IsNullable )
+			combinedChild = Residual.Calc( combinedChild, emptyStringToken, builder );
+		
 		if( !combinedChild.IsNullable ) {
 			// error: unexpected end of element.
 			ReportError( ERR_CONTENTMODEL_INCOMPLETE, document.Name );
