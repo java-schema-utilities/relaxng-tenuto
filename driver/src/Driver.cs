@@ -70,21 +70,20 @@ public class Driver {
 
 public class ConsoleController : GrammarReaderController {
 	
-	public void error( string msg, XmlReader reader ) {
+	public void error( string msg, IXmlLineInfo loc ) {
 		Console.WriteLine("Error: "+msg);
-		PrintLocation(reader);
+		PrintLocation(loc);
 	}
 	
-	public void warning( string msg, XmlReader reader ) {
+	public void warning( string msg, IXmlLineInfo loc ) {
 		Console.WriteLine("Warning: "+msg);
-		PrintLocation(reader);
+		PrintLocation(loc);
 	}
 	
-	private void PrintLocation( XmlReader reader ) {
-		if( typeof(XmlTextReader).IsInstanceOfType(reader) ) {
-			XmlTextReader r = (XmlTextReader)reader;
+	private void PrintLocation( IXmlLineInfo loc ) {
+		if( loc!=null ) {
 			Console.WriteLine("{0}({1}:{2})",
-				r.BaseURI, r.LineNumber, r.LinePosition );
+				((XmlReader)loc).BaseURI, loc.LineNumber, loc.LinePosition );
 		}
 	}
 }
