@@ -8,7 +8,6 @@ using org.relaxng.datatype;
 
 public interface Token {
 	bool Accepts( ListExp exp );
-//	bool Accepts( KeyExp exp );
 	bool Accepts( ElementExp exp );
 	bool Accepts( AttributeExp exp );
 	bool Accepts( DataExp exp );
@@ -18,7 +17,6 @@ public interface Token {
 
 internal class TokenImpl : Token {
 	public virtual bool Accepts( ListExp exp ) { return false; }
-//	public virtual bool Accepts( KeyExp exp ) { return false; }
 	public virtual bool Accepts( DataExp exp ) { return false; }
 	public virtual bool Accepts( ValueExp exp ) { return false; }
 	public virtual bool AcceptsText() { return false; }
