@@ -30,13 +30,16 @@ public class GrammarReader : ValidationContext {
 	
 	public Grammar parse( string sourceURL ) {
 		
+		Uri uri;
 		try {
-			new Uri(sourceURL);
+			uri = new Uri(sourceURL);
 		} catch( UriFormatException ) {
-			sourceURL = Path.GetFullPath(sourceURL);
+			uri = new Uri(Path.GetFullPath(sourceURL));
 		}
 		
-		return parse( ResolveEntity(sourceURL) );
+		return parse(
+			CreateXmlReader( uri.AbsoluteUri,
+			(Stream)Resolver.GetEntity( uri, null, typeof(Stream))));
 	}
 	
 	public Grammar parse( XmlReader reader ) {
@@ -271,8 +274,11 @@ public class GrammarReader : ValidationContext {
 	
 	// resolves the datatypeLibrary attribute value to a DatatypeLibrary object.
 	protected virtual DatatypeLibrary ResolveDatatypeLibrary( string uri ) {
-		if(uri.Equals(""))
+		if(uri=="")
 			return org.relaxng.datatype.helpers.BuiltinDatatypeLibrary.theInstance;
+		if(uri=="http://www.w3.org/2001/XMLSchema-datatypes"
+		|| uri=="http://www.w3.org/2001/XMLSchema")
+			return Tenuto.Datatype.XSDLib.XMLSchemaDatatypeLibrary.theInstance;
 		throw new Exception(uri);
 	}
 	
@@ -550,6 +556,7 @@ public class GrammarReader : ValidationContext {
 		else {
 			try {
 				dt = datatypeLibrary.CreateDatatype(type);
+				Debug.Assert(dt!=null);
 			} catch( DatatypeException e ) {
 				ReportError( ERR_UNDEFINED_TYPENAME, type, e.Message );
 				reader.Skip();
@@ -592,6 +599,7 @@ public class GrammarReader : ValidationContext {
 		DatatypeBuilder builder;
 		try {
 			builder = datatypeLibrary.CreateDatatypeBuilder(type);
+			Debug.Assert(builder!=null);
 		} catch( DatatypeException e ) {
 			ReportError( ERR_UNDEFINED_TYPENAME, type, e.Message );
 			reader.Skip();
@@ -734,7 +742,7 @@ public class GrammarReader : ValidationContext {
 				IXmlLineInfo r = (IXmlLineInfo)reader;
 				LineNumber = r.LineNumber;
 				LinePosition = r.LinePosition;
-				SourceFile = r.BaseURI;	// TODO: is this correct?
+				SourceFile = reader.BaseURI;	// TODO: is this correct?
 			}
 		}
 	}
@@ -1035,7 +1043,11 @@ public class GrammarReader : ValidationContext {
 	
 	protected void ReportError( string propKey, params object[] args ) {
 		HadError = true;
-		Controller.error( string.Format( ResManager.GetString(propKey), args ), reader );
+		IXmlLineInfo li;
+		if(reader is IXmlLineInfo)	li = (IXmlLineInfo)reader;
+		else						li = null;
+		
+		Controller.error( string.Format( ResManager.GetString(propKey), args ), li );
 	}
 	
 	protected const string ERR_MISSING_ATTRIBUTE = // arg:2
