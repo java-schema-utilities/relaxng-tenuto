@@ -35,7 +35,7 @@ public class GrammarReader : ValidationContext {
 		// reset variables
 		nsStack.Clear();
 		dtLibURIStack.Clear();
-		xmlBaseStack.Clear();
+		baseUriStack.Clear();
 		entityURLs.Clear();
 		readerStack.Clear();
 		readerStack.Push(null);
@@ -138,7 +138,7 @@ public class GrammarReader : ValidationContext {
 	
 	// at least with Beta2 SDK, XmlReader.BaseURI doesn't handle
 	// xml:base attribute, so we have to process them manually.
-	private readonly Stack xmlBaseStack = new Stack();
+	private readonly Stack baseUriStack = new Stack();
 	
 	private readonly Stack readerStack = new Stack();
 	
@@ -147,6 +147,9 @@ public class GrammarReader : ValidationContext {
 	
 	// Set up variables to process a next xml file
 	protected bool PushEntity( XmlReader newReader ) {
+		if(newReader==null)
+			return false;	// error of ResolveEntity is handled here
+		
 		string systemId = newReader.BaseURI;
 		
 		if(entityURLs.Contains(systemId)) {
@@ -158,7 +161,7 @@ public class GrammarReader : ValidationContext {
 		readerStack.Push(reader);
 		nsStack.Push("");
 		dtLibURIStack.Push("");
-		xmlBaseStack.Push(null);
+		baseUriStack.Push(new Uri(systemId));
 		
 		reader = newReader;
 		Trace.WriteLine(string.Format("PushEntity({0})",reader.BaseURI));
@@ -172,7 +175,7 @@ public class GrammarReader : ValidationContext {
 		
 		nsStack.Pop();
 		dtLibURIStack.Pop();
-		xmlBaseStack.Pop();
+		baseUriStack.Pop();
 		reader = (XmlReader)readerStack.Pop();
 		entityURLs.Pop();
 	}
@@ -191,15 +194,16 @@ public class GrammarReader : ValidationContext {
 		bool isEmpty = reader.IsEmptyElement;
 		
 		string dtLibURI = GetAttribute("datatypeLibrary");
-		string xmlBase = GetAttribute("xml:base");
 		if(dtLibURI==null)
 			dtLibURI=(string)dtLibURIStack.Peek();
-		if(xmlBase==null)
-			xmlBase=(string)xmlBaseStack.Peek();
-			
+		
+		string xmlBase = GetAttribute("xml:base");
+		Uri baseUri = (Uri)baseUriStack.Peek();
+		if(xmlBase!=null)	baseUri = new Uri(baseUri,xmlBase);
+		
 		if(!isEmpty) {
 			dtLibURIStack.Push(dtLibURI);
-			xmlBaseStack.Push(xmlBase);
+			baseUriStack.Push(baseUri);
 		}
 		reader.ReadStartElement();
 		return !isEmpty;
@@ -210,7 +214,7 @@ public class GrammarReader : ValidationContext {
 		
 		nsStack.Pop();
 		dtLibURIStack.Pop();
-		xmlBaseStack.Pop();
+		baseUriStack.Pop();
 		reader.ReadEndElement();
 	}
 	
@@ -234,11 +238,12 @@ public class GrammarReader : ValidationContext {
 			else			return (string)nsStack.Peek();
 		}
 	}
-	protected string xmlBase {
+	protected Uri baseUri {
 		get {
+			Uri u = (Uri)baseUriStack.Peek();
 			string v = GetAttribute("xml:base");
-			if(v!=null)		return v;
-			else			return (string)xmlBaseStack.Peek();
+			if(v!=null)		return new Uri(u,v);
+			else			return u;
 		}
 	}
 	protected string datatypeLibraryURI {
@@ -397,13 +402,15 @@ public class GrammarReader : ValidationContext {
 	protected virtual Expression ExternalRef() {
 		XmlReader previous = reader;
 		string href = GetRequiredAttribute("href");
+		if(href==null) {
+			EmptyContent();
+			return Expression.NotAllowed;
+		}
 		
 		// this method has to be called while we are at the start element.
 		XmlReader newReader = ResolveEntity(href);
 		
 		EmptyContent();
-		if(href==null)
-			return Expression.NotAllowed;
 		
 		if(!PushEntity(newReader))
 			return Expression.NotAllowed;
@@ -853,16 +860,16 @@ public class GrammarReader : ValidationContext {
 	// resolves the "href" value and obtains XmlReader that reads that source.
 	protected virtual XmlReader ResolveEntity( string href ) {
 		
-		Uri uri = new Uri(reader.BaseURI);
-		string xmlBase = this.xmlBase;
-		if(xmlBase!=null)
-			uri = Resolver.ResolveUri( uri, xmlBase );
-		
-		uri = Resolver.ResolveUri( uri, href );
+		Uri uri = this.baseUri;
 		
 		Trace.WriteLine(string.Format(
-			"SystemId:{0} base:{1} href:{2}\nentity uri:{3}",
-			reader.BaseURI, xmlBase, href, uri));
+			"base:{0}\nhref:{1}",
+			uri, href ));
+		
+		uri = new Uri( uri, href );
+		
+		Trace.WriteLine("after href :"+uri);
+		
 		
 		if(uri.Fragment!=String.Empty) {
 			ReportError( ERR_FRAGMENT_IN_URI, uri );
