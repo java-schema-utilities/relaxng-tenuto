@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project name="tenuto" basedir="." default="core">
+	
+	<property name="debug" value="true" /> <!-- true/false -->
+	<property name="optimize" value="false" /> <!-- true/false -->
+	
+	<property name="relaxngDatatype.dll"
+		value="lib/relaxngDatatype.dll" />
+	
+	
+	<target name="core">
+		<mkdir dir="bin"/>
+		
+		<csc
+			debug="${debug}"
+			optimize="${optimize}"
+			targetType="library"
+			
+			excludes="**/CVS/*.cs"
+			includes="core/src/**/*.cs"
+			srcDir="core/src"
+			outputFile="bin/tenutoCore.dll"
+			
+			references="${relaxngDatatype.dll}"
+		/>
+	</target>
+	
+	<target name="driver" depends="core">
+		<csc
+			debug="${debug}"
+			optimize="${optimize}"
+			targetType="exe"
+			
+			excludes="**/CVS/*.cs"
+			includes="core/src/**/*.cs"
+			srcDir="driver/src"
+			outputFile="bin/tenuto.exe"
+			
+			references="${relaxngDatatype.dll};bin/tenutoCore.dll"
+		/>
+	</target>
+	
+	<target name="release">
+		<property name="debug" value="false" /> <!-- true/false -->
+		<property name="optimize" value="true" /> <!-- true/false -->
+		
+		<rmdir dir="bin"/>
+		
+		<
+</project>
