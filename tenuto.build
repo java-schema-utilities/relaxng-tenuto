@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+	Build script for NAnt.
+	
+	For detail about NAnt, go to http://nant.sourceforge.net/
+-->
+<project name="tenuto" default="lib" basedir=".">
+	
+	<tstamp/>
+	<property name="bin" value="bin"/>
+	
+	<property name="debug" value="true"/>
+	
+	<property name="relaxngDatatype.dll" value="lib\relaxngDatatype.dll"/>
+	<property name="NUnitCore.dll" value="lib\NUnitCore.dll"/>
+	<property name="NUnitConsole.exe" value="lib\NUnitConsole.exe"/>
+	<property name="resgen.exe" value="c:\dotnetSDK\Bin\ResGen.exe" />
+	
+	<target name="lib">
+		<mkdir dir="${bin}"/>
+		<exec program="${resgen.exe}"
+			commandline="core\src\Verifier\Verifier.resx" />
+		<exec program="${resgen.exe}"
+			commandline="core\src\Reader\GrammarReader.txt" />
+		
+		<csc target="library" output="${bin}\tenutoCore.dll"
+			debug="${debug}">
+			<sources basedir="core\src">
+				<includes name="**/*.cs"/>
+			</sources>
+			<resources basedir="core\src">
+				<includes name="**/*.resources"/>
+			</resources>
+			<references>
+				<includes name="${relaxngDatatype.dll}"/>
+			</references>
+		</csc>
+	</target>
+	
+	<target name="driver" depends="lib">
+		<csc target="exe" output="${bin}\tenuto.exe" debug="${debug}">
+			<sources basedir="driver\src">
+				<includes name="**/*.cs" />
+			</sources>
+			<references>
+				<includes name="${relaxngDatatype.dll}"/>
+				<includes name="${bin}/tenutoCore.dll"/>
+			</references>
+		</csc>
+	</target>
+	
+	<target name="test"> <!-- depends="lib"> -->
+		<csc target="exe" output="${bin}\test.exe" debug="${debug}">
+			<sources basedir="core\test">
+				<includes name="**/*.cs"/>
+			</sources>
+			<references>
+				<includes name="${relaxngDatatype.dll}"/>
+				<includes name="${bin}/tenutoCore.dll"/>
+				<includes name="${NUnitCore.dll}"/>
+				<includes name="${NUnitConsole.exe}"/>
+			</references>
+		</csc>
+	</target>
+</project>
