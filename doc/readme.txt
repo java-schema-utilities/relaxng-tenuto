@@ -59,9 +59,11 @@ Tenuto is maintained at RELAX NG Project at SourceForge
 (http://relaxng.sourceforge.net/)
 
 If you find any question, comment, bug, and/or suggestion, please post it
-to XXXXX@relaxng.sourceforge.net. If yours is RELAX NG generic one, you
-might want to use relax-ng-comment@lists.oasis-open.org (to subscribe to
-this list, go to http://lists.oasis-open.org/ob/adm\.pl)
+to reldeve@yahoogroups.com. To subscribe this list, go to
+http://www.yahoogroups.com/group/reldeve.
+If yours is RELAX NG generic one, you might want to use
+relax-ng-comment@lists.oasis-open.org (to subscribe to this list,
+go to http://lists.oasis-open.org/ob/adm.pl)
 
 
 
