@@ -56,6 +56,7 @@ public class Verifier : ValidationContext {
 			switch( document.NodeType ) {
 			case XmlNodeType.CDATA:
 			case XmlNodeType.Text:
+			case XmlNodeType.Whitespace:
 			case XmlNodeType.SignificantWhitespace:
 				OnText();
 				break;
@@ -69,7 +70,6 @@ public class Verifier : ValidationContext {
 				
 			// nodes that are ignored
 			case XmlNodeType.Comment:
-			case XmlNodeType.Whitespace:
 			case XmlNodeType.ProcessingInstruction:
 				document.Read();
 				break;
@@ -91,16 +91,25 @@ public class Verifier : ValidationContext {
 	}
 	
 	private Expression VerifyText( Expression exp, Expression[] atoms ) {
-		if(characters.Length==0)	return exp;
+		string literal;
 		
-		string literal = characters.ToString();
-		characters = new StringBuilder();
+		if(characters.Length==0) {
+			literal = String.Empty;
+		} else {
+			literal = characters.ToString();
+			characters = new StringBuilder();
+		}
+		bool ignorable = (literal.Trim().Length==0);
+		
 		
 		Trace.WriteLine("characters: "+literal.Trim());
 		
 		StringToken token = new StringToken(literal,builder,this);
 		
-		exp = Residual.Calc( exp, token, builder );
+		Expression r = Residual.Calc( exp, token, builder );
+		if(ignorable)	exp = builder.CreateChoice( exp, r );
+		else			exp = r;
+		
 		if(exp==Expression.NotAllowed) {
 			// error: unexpected literal
 			if(literal.Length>20)	literal=literal.Substring(0,20)+" ...";
@@ -108,8 +117,11 @@ public class Verifier : ValidationContext {
 		}
 		
 		if(atoms!=null)
-			for( int i=atoms.Length-1; i>=0; i-- )
-				atoms[i] = Residual.Calc( atoms[i], token, builder );
+			for( int i=atoms.Length-1; i>=0; i-- ) {
+				r = Residual.Calc( atoms[i], token, builder );
+				if(ignorable)	atoms[i] = builder.CreateChoice( atoms[i], r );
+				else			atoms[i] = r;
+			}
 		
 		return exp;
 	}
@@ -128,15 +140,16 @@ public class Verifier : ValidationContext {
 			// error: unexpected element
 			ReportError(ERR_UNEXPECTED_ELEMENT,document.Name);
 		}
-
+		
 		Expression combinedChild = Expression.NotAllowed;
 		int i;
 		for( i=0; match[i]!=null; i++ )
-			combinedChild = builder.CreateChoice(combinedChild,match[0].exp);
+			combinedChild = builder.CreateChoice( combinedChild, match[i].exp );
 		int clen = i;
-
+		
 		Expression[] cp = null;
 		if(clen>1) {
+			Trace.WriteLine(string.Format("{0} elements are matched",clen));
 			cp = new Expression[clen];
 			for( i=0; i<clen; i++ )
 				cp[i] = match[i].exp;
@@ -166,12 +179,11 @@ public class Verifier : ValidationContext {
 			Trace.Unindent();
 			Trace.WriteLine("</"+document.Name+">");
 		} else {
+			// treat it as ""
+			combinedChild = VerifyText(combinedChild,cp);
 			Trace.Unindent();
 			Trace.WriteLine("</"+document.Name+">");
 		}
-		
-		if( !combinedChild.IsNullable )
-			combinedChild = Residual.Calc( combinedChild, emptyStringToken, builder );
 		
 		if( !combinedChild.IsNullable ) {
 			// error: unexpected end of element.
@@ -180,23 +192,27 @@ public class Verifier : ValidationContext {
 		
 		document.Read();	// read the end tag.
 		
-
+		
 		if(cp!=null)
 			for( i=0; i<clen; i++ )
 				if(!cp[i].IsNullable)
 					match[i]=null;
-
+		
 		ElementToken e = new ElementToken(match,clen);
 		if(atoms!=null)
 			for( i=0; i<atoms.Length; i++ )
 				atoms[i] = Residual.Calc(atoms[i],e,builder);
-
-		return Residual.Calc(contentModel,e,builder);
+		
+		contentModel = Residual.Calc(contentModel,e,builder);
+		Trace.WriteLine("residual: " + ExpPrinter.printContentModel(contentModel));
+		return contentModel;
 	}
 
 	protected Expression OnAttribute( Expression exp, Expression[] atoms ) {
 		if(document.Name!="xmlns"
 		&& document.Prefix!="xmlns") {
+			Trace.WriteLine("@"+document.Name);
+			
 			AttributeToken token = new AttributeToken(
 					document.NamespaceURI,
 					document.LocalName,
@@ -209,10 +225,12 @@ public class Verifier : ValidationContext {
 				// error: bad attribute
 				ReportError(ERR_BAD_ATTRIBUTE,document.Name);
 			}
-
+			
 			if(atoms!=null)
 				for( int i=0; i<atoms.Length; i++ )
 					atoms[i] = atoms[i].Visit(feeder);
+			
+			Trace.WriteLine("residual: " + ExpPrinter.printContentModel(exp));
 		}
 		return exp;
 	}

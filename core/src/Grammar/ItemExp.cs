@@ -8,6 +8,10 @@ public abstract class XmlItemExp : UnaryExp {
 			: base(contentModel,opCode,false) {
 		this.Name = nc;
 	}
+	public override bool Equals( object o ) {
+		// use object identity
+		return this==o;
+	}
 }
 
 public class ElementExp : XmlItemExp {

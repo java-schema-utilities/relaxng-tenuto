@@ -18,7 +18,7 @@ public class Residual : ExpVisitorExp {
 	
 	public Expression OnGroup( GroupExp exp ) {
 		Expression r1 = builder.CreateSequence(exp.exp1.Visit(this),exp.exp2);
-		if( exp.IsNullable )
+		if( exp.exp1.IsNullable )
 			return builder.CreateChoice( r1, exp.exp2.Visit(this) );
 		else
 			return r1;

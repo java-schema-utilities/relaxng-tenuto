@@ -383,7 +383,10 @@ public class GrammarReader : ValidationContext {
 			return Expression.NotAllowed;	// recover
 		}
 		
-		return expreader();	// dispatch the reader.
+		Trace.Indent();
+		Expression exp = expreader();	// dispatch the reader.
+		Trace.Unindent();
+		return exp;
 	}
 	
 	
@@ -504,6 +507,9 @@ public class GrammarReader : ValidationContext {
 		if(!isEmpty) {
 			if( SkipForeignElements() )
 				contents = ReadChildExps( new ExpCombinator(Builder.CreateSequence) );
+			else
+				// no child pattern. defaults to <text/>
+				ReadEndElement();
 		}
 		return new AttributeExp(nc,contents);
 	}
@@ -916,7 +922,10 @@ public class GrammarReader : ValidationContext {
 				return new SimpleNameClass("foo","bar");	// recover
 			}
 			
-			return ncreader();	// dispatch the reader.
+			Trace.Indent();
+			NameClass nc = ncreader();	// dispatch the reader.
+			Trace.Unindent();
+			return nc;
 		} else {
 			// there is no child element
 			ReportError( ERR_MISSING_ATTRIBUTE, reader.Name, "name" );

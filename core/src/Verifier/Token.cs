@@ -1,6 +1,7 @@
 namespace Tenuto.Verifier {
 
 using System;
+using System.Collections;
 using System.Diagnostics;
 using Tenuto.Grammar;
 using org.relaxng.datatype;
@@ -39,10 +40,33 @@ internal class StringToken : TokenImpl {
 	private readonly ExpBuilder builder;
 	private readonly ValidationContext context;
 	
+	private static readonly char[] whitespaces = {
+		'\x9', '\xA', '\xB', '\xC', '\xD', '\x20', '\xA0', '\x2000',
+		'\x2001', '\x2002', '\x2003', '\x2004', '\x2005', '\x2006',
+		'\x2007', '\x2008', '\x2009', '\x200A', '\x200B', '\x3000', '\xFEFF' };
+		
+	// Tokenizes a string just like java.util.StringTokenizer
+	private static string[] Tokenize( string s ) {
+		ArrayList tokens = new ArrayList();
+		
+		while(true) {
+			s = s.TrimStart();
+			int idx = s.IndexOfAny(whitespaces);
+			if(idx<0) {
+				if(s.Length!=0)		tokens.Add(s);
+				return (string[])tokens.ToArray(typeof(string));
+			}
+			tokens.Add(s.Substring(0,idx));
+			s = s.Substring(idx);
+		}
+	}
+	
 	public override bool Accepts( ListExp exp ) {
 		if( listItems==null ) {
 			// split the literal by whitespace.
-			string[] tokens = literal.Split(null);
+			string[] tokens = Tokenize(literal);
+			
+//			Trace.WriteLine(string.Format("literal:'{0}' token size:{1}",literal,tokens.Length));
 			listItems = new StringToken[tokens.Length];
 			for( int i=0; i<tokens.Length; i++ )
 				listItems[i] = new StringToken(tokens[i],builder,context);
@@ -51,7 +75,7 @@ internal class StringToken : TokenImpl {
 		Expression body = exp.exp;
 		for( int i=0; i<listItems.Length; i++ ) {
 			body = Residual.Calc( body, listItems[i], builder );
-//			Trace.WriteLine("residual: "+ ExpPrinter.printContentModel(body));
+//			Trace.WriteLine("list residual: "+ ExpPrinter.printContentModel(body));
 			if( body==Expression.NotAllowed )	return false;
 		}
 		return body.IsNullable;
@@ -88,7 +112,11 @@ internal class ElementToken : TokenImpl {
 	
 	public override bool Accepts( ElementExp exp ) {
 		return Array.IndexOf(matched,exp,0,len)>=0;
-	}
+/*		int idx = Array.IndexOf(matched,exp,0,len);
+		if(idx>=0)	Trace.WriteLine("hit :"+ExpPrinter.printContentModel(exp)+" "+idx);
+		else		Trace.WriteLine("miss:"+ExpPrinter.printContentModel(exp));
+		return idx>=0;
+*/	}
 }
 
 internal class AttributeToken : TokenImpl {
@@ -99,11 +127,13 @@ internal class AttributeToken : TokenImpl {
 		this.value = value;
 		this.context = context;
 		this.builder = builder;
+		this.ignorable = (value.Trim().Length==0);
 	}
 	
 	private readonly string uri;
 	private readonly string localName;
 	private readonly string value;
+	private readonly bool ignorable;
 	private readonly ValidationContext context;
 	private readonly ExpBuilder builder;
 	private StringToken valueToken = null;
@@ -113,6 +143,8 @@ internal class AttributeToken : TokenImpl {
 		
 		if( valueToken==null )
 			valueToken = new StringToken( value, builder, context );
+		
+		if( ignorable && exp.exp.IsNullable )	return true;
 		
 		return Residual.Calc( exp.exp, valueToken, builder ).IsNullable;
 	}

@@ -1,5 +1,6 @@
 namespace Tenuto.Datatype {
 
+using System.Text;
 using org.relaxng.datatype;
 
 internal class DatatypeLibraryImpl : DatatypeLibrary {
@@ -81,7 +82,27 @@ internal class TokenType : BuiltinType {
 	private TokenType(){}
 	
 	public override object CreateValue( string literal, ValidationContext context ) {
-		return literal.Trim();
+		return collapse(literal);
+	}
+	
+	private static string collapse( string s ) {
+		StringBuilder buf = new StringBuilder();
+		bool inWhiteSpace = true;
+		
+		foreach( char c in s ) {
+			if( char.IsWhiteSpace(c) ) {
+				if(!inWhiteSpace)	buf.Append(' ');
+				inWhiteSpace = true;
+			} else {
+				buf.Append(c);
+				inWhiteSpace = false;
+			}
+		}
+		// remove trailing whitespace if any.
+		// (there must be at most one)
+		if(inWhiteSpace && buf.Length>0)	buf.Length--;
+		
+		return buf.ToString();
 	}
 }
 
