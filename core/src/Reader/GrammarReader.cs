@@ -32,7 +32,7 @@ public class GrammarReader : ValidationContext {
 			Expression exp = ReadExp();
 			if( HadError )	return null;	// there was an error.
 			
-			if(typeof(Grammar).IsInstanceOfType(exp))
+			if( exp is Grammar )
 				return (Grammar)exp;
 			else {
 				Grammar g = new Grammar(Builder);
@@ -584,7 +584,7 @@ public class GrammarReader : ValidationContext {
 		public int LinePosition = -1;
 		public String SourceFile = null;
 		public void MemorizeReference( XmlReader reader ) {
-			if( typeof(XmlTextReader).IsInstanceOfType(reader) ) {
+			if( reader is XmlTextReader ) {
 				// source information is available only when we are using XmlTextReader
 				XmlTextReader r = (XmlTextReader)reader;
 				LineNumber = r.LineNumber;
@@ -681,7 +681,7 @@ public class GrammarReader : ValidationContext {
 			foreach( ReferenceExp exp in redefiningRefExps.Keys )
 				if( (bool)redefiningRefExps[exp] == false ) {
 					// error: this pattern was not defined.
-					if( typeof(Grammar).IsInstanceOfType(exp) )
+					if( exp is Grammar )
 						ReportError( ERR_REDEFINING_UNDEFINED_START );
 					else
 						ReportError( ERR_REDEFINING_UNDEFINED, exp.name );

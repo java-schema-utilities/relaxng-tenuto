@@ -62,7 +62,7 @@ public class ExpPrinter : ExpVisitorVoid {
 		OnBinExp(exp,"|");
 	}
 	protected void OptimizedChoice( Expression exp ) {
-		if( typeof(OneOrMoreExp).IsInstanceOfType(exp) ) {
+		if( exp is OneOrMoreExp ) {
 			Visit( ((OneOrMoreExp)exp).exp );
 			writer.Write('*');
 			return;
@@ -89,9 +89,9 @@ public class ExpPrinter : ExpVisitorVoid {
 	}
 	protected void Visit( Expression e ) {
 		bool isComplex = false;
-		if(typeof(BinaryExp).IsInstanceOfType(e))
+		if( e is BinaryExp )
 			isComplex = true;
-		if(typeof(ReferenceExp).IsInstanceOfType(e))
+		if( e is ReferenceExp )
 			isComplex = true;
 		
 		if(isComplex)	writer.Write('(');

@@ -12,7 +12,7 @@ public sealed class ExpBuilder  {
 		if( exp1==Expression.NotAllowed || exp2==Expression.NotAllowed )
 			return Expression.NotAllowed;
 
-		if( exp2.GetType()==typeof(GroupExp) ) {
+		if( exp2 is GroupExp ) {
 			// operators are left-associative.
 			GroupExp right = (GroupExp)exp2;
 			return CreateSequence( CreateSequence(exp1,right.exp1), right.exp2 );
@@ -28,7 +28,7 @@ public sealed class ExpBuilder  {
 		if( exp1==Expression.NotAllowed || exp2==Expression.NotAllowed )
 			return Expression.NotAllowed;
 
-		if( exp2.GetType()==typeof(InterleaveExp) ) {
+		if( exp2 is InterleaveExp ) {
 			// operators are left-associative.
 			InterleaveExp right = (InterleaveExp)exp2;
 			return CreateInterleave( CreateInterleave(exp1,right.exp1), right.exp2 );
@@ -57,7 +57,7 @@ public sealed class ExpBuilder  {
 		else
 		if( exp2==Expression.Empty && exp1.IsNullable)	return exp1;
 		
-		if( exp2.GetType()==typeof(ChoiceExp) ) {
+		if( exp2 is ChoiceExp ) {
 			// operatos are left-associative.
 			ChoiceExp right = (ChoiceExp)exp2;
 			return CreateChoice( CreateChoice(exp1,right.exp1), right.exp2 );
@@ -69,7 +69,7 @@ public sealed class ExpBuilder  {
 			if(e==exp2)
 				// exp1 has already contained exp2.
 				return exp1;
-			if( e.GetType()!=typeof(ChoiceExp) )
+			if(!(e is ChoiceExp))
 				break;
 			ChoiceExp left = (ChoiceExp)e;
 			if(left.exp2==exp2)
@@ -85,7 +85,7 @@ public sealed class ExpBuilder  {
 		if( exp==Expression.NotAllowed
 		||  exp==Expression.Empty
 		||  exp==Expression.Text
-		||  exp.GetType()==typeof(OneOrMoreExp) )
+		||  exp is OneOrMoreExp )
 			return exp;
 		
 		return Unify(new OneOrMoreExp(exp));
