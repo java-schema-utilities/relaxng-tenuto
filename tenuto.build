@@ -11,10 +11,12 @@
 	
 	<property name="debug" value="true"/>
 	
+	<!-- depending on your environment, change the following property -->
+	<property name="resgen.exe" value="c:\dotnetSDK\Bin\ResGen.exe" />
+	
 	<property name="relaxngDatatype.dll" value="lib\relaxngDatatype.dll"/>
 	<property name="NUnitCore.dll" value="lib\NUnitCore.dll"/>
 	<property name="NUnitConsole.exe" value="lib\NUnitConsole.exe"/>
-	<property name="resgen.exe" value="c:\dotnetSDK\Bin\ResGen.exe" />
 	
 	<target name="lib">
 		<mkdir dir="${bin}"/>

@@ -1,50 +1,34 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<project name="tenuto" basedir="." default="core">
-	
-	<property name="debug" value="true" /> <!-- true/false -->
-	<property name="optimize" value="false" /> <!-- true/false -->
-	
-	<property name="relaxngDatatype.dll"
-		value="lib/relaxngDatatype.dll" />
+<?xml version="1.0"?>
+<!--
+	Ant build script to produce a distribution package.
+	For more about ant, go to http://jakarta.apache.org/ant/
+-->
+<project name="relaxng" basedir="." default="release">
 	
 	
-	<target name="core">
-		<mkdir dir="bin"/>
-		
-		<csc
-			debug="${debug}"
-			optimize="${optimize}"
-			targetType="library"
-			
-			excludes="**/CVS/*.cs"
-			includes="core/src/**/*.cs"
-			srcDir="core/src"
-			outputFile="bin/tenutoCore.dll"
-			
-			references="${relaxngDatatype.dll}"
-		/>
-	</target>
-	
-	<target name="driver" depends="core">
-		<csc
-			debug="${debug}"
-			optimize="${optimize}"
-			targetType="exe"
-			
-			excludes="**/CVS/*.cs"
-			includes="core/src/**/*.cs"
-			srcDir="driver/src"
-			outputFile="bin/tenuto.exe"
-			
-			references="${relaxngDatatype.dll};bin/tenutoCore.dll"
-		/>
-	</target>
+	<patternset id="source.files">
+		<include name="**/*.cs"/>
+		<include name="**/*.txt"/>
+		<include name="**/*.resx"/>
+	</patternset>
 	
 	<target name="release">
-		<property name="debug" value="false" /> <!-- true/false -->
-		<property name="optimize" value="true" /> <!-- true/false -->
+		<tstamp/>
 		
-		<rmdir dir="bin"/>
+		<property name="prefix" value="tenuto.${DSTAMP}/" />
 		
-		<
+		<!-- creates distribution package -->
+		<zip	zipfile="tenuto.${DSTAMP}.zip">
+			<zipfileset dir="core/src" prefix="${prefix}src/core/src">
+				<patternset refid="source.files"/>
+			</zipfileset>
+			<zipfileset dir="driver/src" prefix="${prefix}src/driver/src">
+				<patternset refid="source.files"/>
+			</zipfileset>
+			<zipfileset dir="." includes="lib/*.*" prefix="${prefix}src" />
+			<zipfileset dir="." includes="bin/tenuto.exe, bin/tenutoCore.dll, bin/relaxngDatatype.dll" prefix="${prefix}" />
+			<zipfileset dir="doc" includes="*.*" prefix="${prefix}" />
+			<zipfileset dir="." includes="tenuto.build" prefix="${prefix}src" />
+		</zip>
+	</target>
 </project>
